@@ -60,8 +60,12 @@ source "arch/riscv/cpu/generic/Kconfig"
 
 # architecture-specific options below
 
+config ARCH_DEFAULT_RV64I
+	bool
+
 choice
 	prompt "Base ISA"
+	default ARCH_RV64I if ARCH_DEFAULT_RV64I
 	default ARCH_RV32I
 
 config ARCH_RV32I

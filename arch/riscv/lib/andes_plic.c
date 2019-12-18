@@ -44,6 +44,7 @@ static int init_plic(void);
 		}							\
 	} while (0)
 
+#ifndef CONFIG_SIFIVE_CLINT
 static int enable_ipi(int hart)
 {
 	unsigned int en;
@@ -116,6 +117,7 @@ int riscv_clear_ipi(int hart)
 
 	return 0;
 }
+#endif
 
 int riscv_get_ipi(int hart, int *pending)
 {

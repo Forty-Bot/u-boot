@@ -241,6 +241,9 @@ config XIP
 config SHOW_REGS
 	bool "Show registers on unhandled exception"
 
+config SYS_RISCV_NOCOUNTER
+	bool "Disable accesses to the mcounteren CSR"
+
 config STACK_SIZE_SHIFT
 	int
 	default 14

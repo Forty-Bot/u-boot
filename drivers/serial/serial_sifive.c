@@ -203,6 +203,7 @@ U_BOOT_DRIVER(serial_sifive) = {
 	.platdata_auto_alloc_size = sizeof(struct sifive_uart_platdata),
 	.probe = sifive_serial_probe,
 	.ops	= &sifive_serial_ops,
+	.flags = DM_FLAG_PRE_RELOC,
 };
 
 #ifdef CONFIG_DEBUG_UART_SIFIVE

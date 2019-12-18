@@ -44,6 +44,7 @@ static int init_plic(void);
 		}							\
 	} while (0)
 
+#ifndef CONFIG_SIFIVE_CLINT
 static int enable_ipi(int hart)
 {
 	unsigned int en;
@@ -127,6 +128,7 @@ int riscv_get_ipi(int hart, int *pending)
 
 	return 0;
 }
+#endif
 
 static const struct udevice_id andes_plic_ids[] = {
 	{ .compatible = "riscv,plic1", .data = RISCV_SYSCON_PLIC },

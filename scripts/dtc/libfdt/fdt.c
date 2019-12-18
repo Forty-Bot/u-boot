@@ -83,8 +83,11 @@ int fdt_check_header(const void *fdt)
 {
 	size_t hdrsize;
 
+	/* Dirty hack to disable the magic byte check at runtime */
+#ifndef __VSPRINTF_H
 	if (fdt_magic(fdt) != FDT_MAGIC)
 		return -FDT_ERR_BADMAGIC;
+#endif
 	if (fdt_chk_version()) {
 		if ((fdt_version(fdt) < FDT_FIRST_SUPPORTED_VERSION)
 		    || (fdt_last_comp_version(fdt) >

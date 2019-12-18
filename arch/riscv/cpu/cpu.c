@@ -89,7 +89,9 @@ int arch_cpu_init_dm(void)
 		 * Enable perf counters for cycle, time,
 		 * and instret counters only
 		 */
+#ifndef CONFIG_SYS_RISCV_NOCOUNTER
 		csr_write(CSR_MCOUNTEREN, GENMASK(2, 0));
+#endif
 
 		/* Disable paging */
 		if (supports_extension('s'))

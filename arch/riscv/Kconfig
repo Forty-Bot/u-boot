@@ -226,6 +226,9 @@ config XIP
 	  from a NOR flash memory without copying the code to ram.
 	  Say yes here if U-Boot boots from flash directly.
 
+config SYS_RISCV_NOCOUNTER
+	bool "Disable accesses to the mcounteren CSR"
+
 config STACK_SIZE_SHIFT
 	int
 	default 14

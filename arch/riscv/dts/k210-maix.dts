@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright (C) 2019 Sean Anderson <seanga2@gmail.com>
+ */
+
+/dts-v1/;
+
+#include "k210.dtsi"
+
+/ {
+	model = "Sipeed Maix";
+	compatible = "sipeed,maix", "kendryte,k210";
+
+	chosen {
+		bootargs = "console=ttyS0,115200n8 debug loglevel=7";
+		stdout-path = "/serial0";
+	};
+};
+
+&spi0 {
+	mmc-slot@0 {
+		compatible = "mmc-slot";
+		reg = <0>;
+		//spi-max-frequency = <???>;
+		broken-cd;
+	};
+};
+
+&spi3 {
+	spi-flash@0 {
+		compatible = "gd25lq64c";
+		reg = <0>;
+		spi-max-frequency = <133000000>;
+		m25p,fast-read;
+	};
+};

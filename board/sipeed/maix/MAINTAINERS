@@ -1,0 +1,6 @@
+Sipeed Maix BOARD
+M:	Sean Anderson <seanga2@gmail.com>
+S:	Maintained
+F:	board/sipeed/maix/
+F:	include/configs/sipeed-maix.h
+F:	configs/sipeed_maix_defconfig

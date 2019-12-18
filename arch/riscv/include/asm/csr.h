@@ -93,7 +93,13 @@
 #define CSR_MISA		0x301
 #define CSR_MIE			0x304
 #define CSR_MTVEC		0x305
+#ifdef RISCV_PRIV_1_9_1
+#define CSR_MUCOUNTEREN         0x320
+#define CSR_MSCOUNTEREN         0x321
+#define CSR_MHCOUNTEREN         0x322
+#else
 #define CSR_MCOUNTEREN		0x306
+#endif
 #define CSR_MSCRATCH		0x340
 #define CSR_MEPC		0x341
 #define CSR_MCAUSE		0x342

@@ -89,7 +89,13 @@ int arch_cpu_init_dm(void)
 		 * Enable perf counters for cycle, time,
 		 * and instret counters only
 		 */
+#ifdef CONFIG_RISCV_PRIV_1_9_1
+		/* FIXME: Can't use the macro for some reason... */
+		csr_write(mscounteren, GENMASK(2, 0));
+		csr_write(mucounteren, GENMASK(2, 0));
+#else
 		csr_write(CSR_MCOUNTEREN, GENMASK(2, 0));
+#endif
 
 		/* Disable paging */
 		if (supports_extension('s'))

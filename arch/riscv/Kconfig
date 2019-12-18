@@ -222,6 +222,16 @@ config XIP
 	  from a NOR flash memory without copying the code to ram.
 	  Say yes here if U-Boot boots from flash directly.
 
+config RISCV_PRIV_1_9_1
+	bool "Use version 1.9.1 of the RISC-V priviledged specification"
+	help
+	  Older versions of the RISC-V priviledged specification had
+	  separate counter enable CSRs for each privilege mode. Writing
+	  to the unified mcounteren CSR on a processor implementing the
+	  old specification will result in an illegal instruction
+	  exception. In addition to counter CSR changes, the way virtual
+	  memory is configured was also changed.
+
 config STACK_SIZE_SHIFT
 	int
 	default 14

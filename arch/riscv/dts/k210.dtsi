@@ -27,6 +27,7 @@
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
 			clock-frequency = <26000000>;
+			u-boot,dm-pre-reloc;
 		};
 	};
 
@@ -371,6 +372,18 @@
 				compatible = "kendryte,k210-clk";
 				clocks = <&in0>;
 				#clock-cells = <1>;
+				assigned-clocks = <&sysclk K210_CLK_ACLK>,
+				                  <&sysclk K210_CLK_PLL0>,
+				                  <&sysclk K210_CLK_PLL1>,
+						  <&sysclk K210_CLK_PLL2>;
+				assigned-clock-parents = <&sysclk K210_CLK_PLL0>,
+				                         <0>,
+							 <0>,
+							 <&in0>;
+				assigned-clock-rates = <793000000>,
+				                       <390000000>,
+						       <390000000>,
+						       <793000000>;
 			};
 
 			sysrst: reset-controller {

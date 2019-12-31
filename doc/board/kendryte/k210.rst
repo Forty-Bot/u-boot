@@ -1,0 +1,46 @@
+.. SPDX-License-Identifier: GPL-2.0+
+
+K210
+====
+
+The Kendryte K210 processor is a 64-bit RISC-V CPU. This processor contains
+several peripherals to accelerate neural network processing and other "ai"
+tasks. This includes a "KPU" neural network processor, an audio processor
+supporting beamforming reception, and a digital video port supporting capture
+and output at VGA resolution. Other peripherals include 8M of sram (accessible
+with and without caching); remappable pins, including 40 GPIOs; AES, FFT, and
+SHA256 accelerators; a DMA controller; and I2C, I2S, and SPI controllers. Maix
+peripherals vary, but include spi flash; on-board usb-serial bridges; ports for
+cameras, displays, and sd cards; and ESP32 chips. Currently, only the Sipeed
+Maix Bit V2.0 (bitm) is supported, but the boards are fairly similar.
+
+Documentation for Maix boards is located at <http://dl.sipeed.com/MAIX/HDK/>.
+Documentation for the Kendryte K210 is located at
+<https://kendryte.com/downloads/>. However, hardware details are rather lacking,
+so most technical reference has been taken from the standalone sdk located at
+<https://github.com/kendryte/kendryte-standalone-sdk>.
+
+Build and boot steps
+--------------------
+
+To build u-boot, run
+
+make sipeed_maix_bit_defconfig
+make CROSS_COMPILE=<your cross compile prefix>
+
+To flash u-boot to a maix bit, run
+kflash -tp /dev/<your tty here> -B bit_mic u-boot-dtb.bin
+
+Boot output should look like the following:
+
+U-Boot 2020.01-00455-gad03fd83e1 (Jan 15 2020 - 17:10:24 -0500)
+
+DRAM:  8 MiB
+MMC:   spi@52000000:slot@0: 0
+In:    serial@38000000
+Out:   serial@38000000
+Err:   serial@38000000
+=> 
+
+Note that spi does not work! I will try to figure out how to make it work, but
+for now the only way to boot something is to transfer it into ram over serial.

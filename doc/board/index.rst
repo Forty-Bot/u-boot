@@ -13,6 +13,7 @@ Board-specific doc
    freescale/index
    google/index
    intel/index
+   kendryte/index
    renesas/index
    sifive/index
    xilinx/index

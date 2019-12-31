@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (C) 2019 Sean Anderson <seanga2@gmail.com>
+
+if TARGET_SIPEED_MAIX
+
+config SYS_BOARD
+	default "maix"
+
+config SYS_VENDOR
+	default "sipeed"
+
+config SYS_CPU
+	default "generic"
+
+config SYS_CONFIG_NAME
+	default "sipeed-maix"
+
+config SYS_TEXT_BASE
+	default 0x80000000
+
+config NR_CPUS
+	default 2
+
+config NR_DRAM_BANKS
+	default 2
+
+config BOARD_SPECIFIC_OPTIONS
+	def_bool y
+	select GENERIC_RISCV
+	select DM_SERIAL
+	select SIFIVE_SERIAL
+	select ARCH_DEFAULT_RV64I
+	select ENV_IS_NOWHERE
+	imply SIFIVE_CLINT
+	imply SPI
+	imply DM_GPIO
+	imply CMD_GPIO
+	imply SYS_NS16550
+	imply SYS_MALLOC_F
+endif

@@ -1,1 +1,1 @@
-obj-y += pll.o
+obj-y += clk.o pll.o

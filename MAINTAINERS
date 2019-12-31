@@ -781,6 +781,12 @@ F:	arch/riscv/
 F:	cmd/riscv/
 F:	tools/prelink-riscv.c
 
+RISC-V KENDRYTE
+M:	Sean Anderson <seanga2@gmail.com>
+S:	Maintained
+F:	drivers/clk/kendryte/
+F:	include/kendryte/
+
 ROCKUSB
 M:	Eddie Cai <eddie.cai.linux@gmail.com>
 S:	Maintained

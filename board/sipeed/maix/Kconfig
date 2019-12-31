@@ -27,6 +27,9 @@ config NR_CPUS
 config NR_DRAM_BANKS
 	default 2
 
+config SYS_MALLOC_F_LEN
+	default 0x8000
+
 config BOARD_SPECIFIC_OPTIONS
 	def_bool y
 	select GENERIC_RISCV
@@ -34,7 +37,6 @@ config BOARD_SPECIFIC_OPTIONS
 	select SIFIVE_SERIAL
 	select ARCH_DEFAULT_RV64I
 	select ENV_IS_NOWHERE
-	select ARCH_K210
 	imply SIFIVE_CLINT
 	imply K210_SYSCTL
 	imply CLK_K210

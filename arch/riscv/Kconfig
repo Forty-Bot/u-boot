@@ -245,7 +245,4 @@ config STACK_SIZE_SHIFT
 config SPL_LDSCRIPT
 	default "arch/riscv/cpu/u-boot-spl.lds"
 
-config ARCH_K210
-	bool "Support Kendryte K210 SOCs"
-
 endmenu

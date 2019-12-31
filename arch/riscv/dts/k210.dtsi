@@ -1,0 +1,442 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright (C) 2019 Sean Anderson <seanga2@gmail.com>
+ */
+
+#include <dt-bindings/clock/k210-sysctl.h>
+#include <dt-bindings/reset/k210-sysctl.h>
+
+/ {
+	/*
+	 * Although the K210 is a 64-bit CPU, the address bus is only 32-bits
+	 * wide, and the upper half of all addresses is ignored.
+	 */
+	#address-cells = <1>;
+	#size-cells = <1>;
+	compatible = "kendryte,k210";
+
+	aliases {
+		serial0 = &uarths0;
+		serial1 = &uart1;
+		serial2 = &uart2;
+		serial3 = &uart3;
+	};
+
+	clocks {
+		in0: in0 {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <26000000>;
+		};
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		timebase-frequency = <390000000>;
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			reg = <0>;
+			compatible = "riscv";
+			riscv,isa = "rv64acdfim";
+			mmu-type = "riscv,sv32";
+			i-cache-size = <0x8000>;
+			i-cache-block-size = <64>; /* bogus */
+			d-cache-size = <0x8000>;
+			d-cache-block-size = <64>; /* bogus */
+			clocks = <&sysclk K210_CLK_CPU>;
+			cpu-frequency = <390000000>;
+			CPU0_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+			};
+		};
+		cpu1: cpu@1 {
+			device_type = "cpu";
+			reg = <1>;
+			compatible = "riscv";
+			riscv,isa = "rv64acdfim";
+			mmu-type = "riscv,sv32";
+			i-cache-size = <0x8000>;
+			i-cache-block-size = <64>; /* bogus */
+			d-cache-size = <0x8000>;
+			d-cache-block-size = <64>; /* bogus */
+			clocks = <&sysclk K210_CLK_CPU>;
+			cpu-frequency = <390000000>;
+			CPU1_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+			};
+		};
+	};
+
+	sram0: memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 0x400000>;
+		clocks = <&sysclk K210_CLK_SRAM0>;
+	};
+
+	sram1: memory@80400000 {
+		device_type = "memory";
+		reg = <0x80400000 0x400000>;
+		clocks = <&sysclk K210_CLK_SRAM1>;
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		ai_reserved: ai@80600000 {
+			reg = <0x80600000 0x200000>;
+			reusable;
+		};
+	};
+
+	soc {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "simple-bus";
+		ranges;
+		interrupt-parent = <&pic0>;
+		resets = <&sysrst K210_RST_SOC>;
+
+		clint0: interrupt-controller@2000000 {
+			compatible = "riscv,clint0";
+			reg = <0x2000000 0xC000>;
+			interrupts-extended = <&CPU0_intc 3>,  <&CPU1_intc 3>;
+			clocks = <&sysclk K210_CLK_CPU>;
+		};
+
+		pic0: interrupt-controller@c000000 {
+			#interrupt-cells = <1>;
+			interrupt-controller;
+			compatible = "riscv,plic1";
+			reg = <0xC000000 0x03FFF008>;
+			interrupts-extended = <&CPU0_intc 11>, <&CPU0_intc 9>,
+			                      <&CPU1_intc 11>, <&CPU1_intc 9>;
+			riscv,ndev = <65>;
+		};
+
+		uarths0: serial@38000000 {
+			compatible = "sifive,uart0";
+			reg = <0x38000000 0x20>;
+			interrupts = <33>;
+			clocks = <&sysclk K210_CLK_CPU>;
+			status = "disabled";
+		};
+
+		gpio0: gpio_controller@38001000 {
+			#gpio-cells = <2>;
+			compatible = "none";
+			reg = <0x38001000 0x44>;
+			gpio-controller;
+			interrupts = <34 35 36 37 38 39 40 41
+			              42 43 44 45 46 47 48 49
+			              50 51 52 53 54 55 56 57
+				      58 59 60 61 62 63 64 65>;
+			clocks = <&sysclk K210_CLK_CPU>;
+			status = "disabled";
+		};
+
+		kpu0: kpu@40600000 {
+			compatible = "none";
+			reg = <0x40800000 0x48>;
+			interrupts = <25>;
+			clocks = <&sysclk K210_CLK_AI>;
+			memory-region = <&ai_reserved>;
+			status = "disabled";
+		};
+
+		fft0: fft@42000000 {
+			compatible = "none";
+			reg = <0x42000000 0x400000>;
+			interrupts = <26>;
+			clocks = <&sysclk K210_CLK_FFT>;
+			resets = <&sysrst K210_RST_FFT>;
+			status = "disabled";
+		};
+
+		dmac0: dma-controller@50000000 {
+			compatible = "snps,axi-dma-1.01a";
+			reg = <0x50000000 0xD00>;
+			interrupts = <27 28 29 30 31 32>;
+			clocks = <&sysclk K210_CLK_DMA>;
+			resets = <&sysrst K210_RST_DMA>;
+			dma-channels = <6>;
+			snps,dma-masters = <2>;
+			snps,data-width = <5>;
+			snps,block-size = <0x400000 0x400000 0x400000
+			                   0x400000 0x400000 0x400000>;
+			snps,axi-max-burst-len = <256>;
+			status = "disabled";
+		};
+
+		gpio1: gpio-controller@50200000 {
+			#gpio-cells = <2>;
+			compatible = "none";
+			reg = <0x50200000 0x6C>;
+			gpio-controller;
+			//gpio-ranges = < >;
+			interrupts = <23>;
+			clocks = <&sysclk K210_CLK_GPIO>;
+			resets = <&sysrst K210_RST_GPIO>;
+			status = "disabled";
+		};
+
+		uart1: serial@50210000 {
+			compatible = "ns16550";
+			reg = <50210000 0xc4>;
+			interrupts = <11>;
+			clocks = <&sysclk K210_CLK_UART1>;
+			resets = <&sysrst K210_RST_UART1>;
+			fifo-size = <8>;
+			no-loopback-test;
+			status = "disabled";
+		};
+
+		uart2: serial@50220000 {
+			compatible = "ns16550";
+			reg = <50220000 0xc4>;
+			interrupts = <12>;
+			clocks = <&sysclk K210_CLK_UART2>;
+			resets = <&sysrst K210_RST_UART2>;
+			fifo-size = <8>;
+			no-loopback-test;
+			status = "disabled";
+		};
+
+		uart3: serial@50230000 {
+			compatible = "ns16550";
+			reg = <50230000 0xc4>;
+			interrupts = <13>;
+			clocks = <&sysclk K210_CLK_UART3>;
+			resets = <&sysrst K210_RST_UART3>;
+			fifo-size = <8>;
+			no-loopback-test;
+			status = "disabled";
+		};
+
+		spi2: spi@50240000 {
+			compatible = "snps,designware-spi";
+			spi-slave;
+			reg = <0x50240000 0x120>;
+			interrupts = <2>;
+			clocks = <&sysclk K210_CLK_SPI2>;
+			resets = <&sysrst K210_RST_SPI2>;
+			status = "disabled";
+		};
+
+		i2s0: i2s@50250000 {
+			compatible = "snps.designware-i2s";
+			reg = <0x50250000 0x200>;
+			interrupts = <5>;
+			clocks = <&sysclk K210_CLK_I2S0>;
+			resets = <&sysrst K210_RST_I2S0>;
+			status = "disabled";
+		};
+
+		apu0: sound@520250200 {
+			compatible = "none";
+			reg = <0x50250200 0x138>;
+			status = "disabled";
+		};
+
+		i2s1: i2s@50260000 {
+			compatible = "snps.designware-i2s";
+			reg = <0x50260000 0x200>;
+			interrupts = <6>;
+			clocks = <&sysclk K210_CLK_I2S1>;
+			resets = <&sysrst K210_RST_I2S1>;
+			status = "disabled";
+		};
+
+		i2s2: i2s@50270000 {
+			compatible = "snps.designware-i2s";
+			reg = <0x50270000 0x200>;
+			interrupts = <7>;
+			clocks = <&sysclk K210_CLK_I2S2>;
+			resets = <&sysrst K210_RST_I2S2>;
+			status = "disabled";
+		};
+
+		i2c0: i2c@50280000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x50280000 0x100>;
+			interrupts = <8>;
+			clocks = <&sysclk K210_CLK_I2C0>;
+			resets = <&sysrst K210_RST_I2C0>;
+			status = "disabled";
+		};
+
+		i2c1: i2c@50290000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x50290000 0x100>;
+			interrupts = <9>;
+			clocks = <&sysclk K210_CLK_I2C1>;
+			resets = <&sysrst K210_RST_I2C1>;
+			status = "disabled";
+		};
+
+
+		i2c2: i2c@502A0000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x502A0000 0x100>;
+			interrupts = <10>;
+			clocks = <&sysclk K210_CLK_I2C2>;
+			resets = <&sysrst K210_RST_I2C2>;
+			status = "disabled";
+		};
+
+		fpioa: pinmux@502B0000 {
+			compatible = "pinconf-single";
+			reg = <0x502B0000 0x100>;
+			//#pinctrl-cells = <???>;
+			pinctrl-single,register-width = <32>;
+			pinctrl-single,function-mask = <0x7fffff>;
+			clocks = <&sysclk K210_CLK_FPIOA>;
+			resets = <&sysrst K210_RST_FPIOA>;
+			status = "disabled";
+		};
+
+		sha256: sha256@502C0000 {
+			compatible = "none";
+			reg = <0x502C0000 0x38>;
+			clocks = <&sysclk K210_CLK_SHA>;
+			resets = <&sysrst K210_RST_SHA>;
+			status = "disabled";
+		};
+
+		timer0: timer@502D0000 {
+			compatible = "none";
+			reg = <0x502D0000 0xC0>;
+			interrupts = <14 15>;
+			clocks = <&sysclk K210_CLK_TIMER0>;
+			resets = <&sysrst K210_RST_TIMER0>;
+			status = "disabled";
+		};
+
+		timer1: timer@502E0000 {
+			compatible = "none";
+			reg = <0x502E0000 0xC0>;
+			interrupts = <16 17>;
+			clocks = <&sysclk K210_CLK_TIMER1>;
+			resets = <&sysrst K210_RST_TIMER1>;
+			status = "disabled";
+		};
+
+		timer2: timer@502F0000 {
+			compatible = "none";
+			reg = <0x502F0000 0xC0>;
+			interrupts = <18 19>;
+			clocks = <&sysclk K210_CLK_TIMER2>;
+			resets = <&sysrst K210_RST_TIMER2>;
+			status = "disabled";
+		};
+
+		wdt0: watchdog@50400000 {
+			compatible = "none";
+			reg = <0x50400000 0x100>;
+			interrupts = <21>;
+			clocks = <&sysclk K210_CLK_WDT0>;
+			resets = <&sysrst K210_RST_WDT0>;
+			status = "disabled";
+		};
+
+		wdt1: watchdog@50410000 {
+			compatible = "none";
+			reg = <0x50410000 0x100>;
+			interrupts = <22>;
+			clocks = <&sysclk K210_CLK_WDT1>;
+			resets = <&sysrst K210_RST_WDT1>;
+			status = "disabled";
+		};
+
+		dvp0: camera@50430000 {
+			compatible = "none";
+			reg = <0x50430000 0x2c>;
+			interrupts = <24>;
+			clocks = <&sysclk K210_CLK_DVP>;
+			resets = <&sysrst K210_RST_DVP>;
+			status = "disabled";
+		};
+
+		sysctl: sysctl@50440000 {
+			compatible = "kendryte,k210-sysctl", "syscon";
+			reg = <0x50440000 0x80>;
+
+			sysclk: clock-controller {
+				compatible = "kendryte,k210-clk";
+				clocks = <&in0>;
+				#clock-cells = <1>;
+			};
+
+			sysrst: reset-controller {
+				compatible = "kendryte,k210-rst";
+				#reset-cells = <1>;
+			};
+		};
+
+		aes0: aes@50450000 {
+			compatible = "none";
+			reg = <0x50450000 0x94>;
+			clocks = <&sysclk K210_CLK_AES>;
+			resets = <&sysrst K210_RST_AES>;
+			status = "disabled";
+		};
+
+		rtc: rts@50460000 {
+			compatible = "none";
+			reg = <0x50460000 0x2C>;
+			clocks = <&in0>;
+			resets = <&sysrst K210_RST_RTC>;
+			interrupts = <20>;
+			status = "disabled";
+		};
+
+		spi0: spi@52000000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "snps,designware-spi";
+			reg = <0x52000000 0x120>;
+			interrupts = <1>;
+			clocks = <&sysclk K210_CLK_SPI0>;
+			resets = <&sysrst K210_RST_SPI0>;
+			num-cs = <4>;
+			status = "disabled";
+		};
+
+		spi1: spi@53000000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "snps,designware-spi";
+			reg = <0x53000000 0x120>;
+			interrupts = <2>;
+			clocks = <&sysclk K210_CLK_SPI1>;
+			resets = <&sysrst K210_RST_SPI1>;
+			num-cs = <4>;
+			status = "disabled";
+		};
+
+		spi3: spi@54000000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "snps,designware-spi";
+			reg = <0x54000000 0x120>;
+			interrupts = <4>;
+			clocks = <&sysclk K210_CLK_SPI3>;
+			resets = <&sysrst K210_RST_SPI3>;
+			num-cs = <1>;
+			status = "disabled";
+		};
+
+		rom0: nvmem@88000000 {
+			reg = <0x88000000 0x4000>;
+			read-only;
+			clocks = <&sysclk K210_CLK_ROM>;
+			resets = <&sysrst K210_RST_ROM>;
+		};
+	};
+};

@@ -592,6 +592,10 @@
 				spi-max-frequency = <25000000>;
 				num-cs = <4>;
 				reg-io-width = <4>;
+				snps,dfs-offset = <16>;
+				snps,frf-offset = <21>;
+				snps,tmod-offset = <8>;
+				snps,mode-offset = <6>;
 				status = "disabled";
 			};
 
@@ -608,6 +612,10 @@
 				spi-max-frequency = <25000000>;
 				num-cs = <4>;
 				reg-io-width = <4>;
+				snps,dfs-offset = <16>;
+				snps,frf-offset = <21>;
+				snps,tmod-offset = <8>;
+				snps,mode-offset = <6>;
 				status = "disabled";
 			};
 
@@ -625,6 +633,10 @@
 				spi-max-frequency = <100000000>;
 				num-cs = <4>;
 				reg-io-width = <4>;
+				snps,dfs-offset = <0>;
+				snps,frf-offset = <22>;
+				snps,tmod-offset = <10>;
+				snps,mode-offset = <8>;
 				status = "disabled";
 			};
 		};

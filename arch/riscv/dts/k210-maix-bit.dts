@@ -235,9 +235,99 @@
 			pins = "IO_47";
 		};
 	};
+
+	fpioa_spi0: spi0 {
+		cs0 {
+			function = "GPIOHS28";
+			pins = "IO_36";
+		};
+		rst {
+			function = "GPIOHS29";
+			pins = "IO_37";
+		};
+		dc {
+			function = "GPIOHS30";
+			pins = "IO_38";
+		};
+		wr {
+			function = "SPI0_SCK";
+			pins = "IO_39";
+		};
+	};
+
+	fpioa_spi1: spi1 {
+		miso {
+			function = "SPI1_D1";
+			pins = "IO_26";
+		};
+		clk {
+			function = "SPI1_SCLK";
+			pins = "IO_27";
+		};
+		mosi {
+			function = "SPI1_D0";
+			pins = "IO_28";
+		};
+		cs0 {
+			function = "GPIOHS31";
+			pins = "IO_29";
+		};
+	};
+};
+
+&wdt0 {
+	status = "okay";
 };
 
 &dvp0 {
 	pinctrl-0 = <&fpioa_dvp>;
 	pinctrl-names = "default";
+};
+
+&spi0 {
+	pinctrl-0 = <&fpioa_spi0>;
+	pinctrl-names = "default";
+	num-cs = <1>;
+	cs-gpios = <&gpio0 28 0>;
+
+	panel@0 {
+		compatible = "sitronix,st8898v";
+		reg = <0>;
+		reset-gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
+		spi-max-frequency = <15000000>;
+		status = "disabled";
+	};
+};
+
+&spi1 {
+	pinctrl-0 = <&fpioa_spi1>;
+	pinctrl-names = "default";
+	num-cs = <1>;
+	cs-gpios = <&gpio0 31 0>;
+	status = "okay";
+
+	slot@0 {
+		compatible = "mmc-spi-slot";
+		reg = <0>;
+		spi-max-frequency = <25000000>;
+		voltage-ranges = <3300 3300>;
+		broken-cd;
+		disable-wp;
+	};
+};
+
+&spi3 {
+	status = "okay";
+
+	spi-flash@0 {
+		compatible = "winbond,w25q128fw", "jedec,spi-nor";
+		reg = <0>;
+		/*
+		 * Datasheet says it should work at 100 MHz with fast read, but
+		 * after testing it doesn't probe at that frequency
+		 */
+		spi-max-frequency = <50000000>;
+		m25p,fast-read;
+		broken-flash-reset;
+	};
 };

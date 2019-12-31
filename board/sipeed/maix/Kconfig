@@ -36,6 +36,7 @@ config BOARD_SPECIFIC_OPTIONS
 	select ENV_IS_NOWHERE
 	select SYS_RISCV_NOCOUNTER
 	imply SIFIVE_CLINT
+	imply K210_SYSCTL
 	imply SPI
 	imply DM_GPIO
 	imply CMD_GPIO

@@ -57,4 +57,14 @@ config BOARD_SPECIFIC_OPTIONS
 	imply CMD_GPIO
 	imply LED
 	imply LED_GPIO
+	imply SPI
+	imply DESIGNWARE_SPI
+	imply SPI_FLASH_WINBOND
+	imply DM_MTD
+	imply SPI_FLASH_MTD
+	imply CMD_MTD
+	imply ENV_IS_IN_SPI_FLASH
+	imply MMC
+	imply MMC_BROKEN_CD
+	imply MMC_SPI
 endif

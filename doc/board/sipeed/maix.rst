@@ -46,42 +46,14 @@ Boot output should look like the following:
     U-Boot 2020.04-rc2-00087-g2221cc09c1-dirty (Feb 28 2020 - 13:53:09 -0500)
 
     DRAM:  8 MiB
+    MMC:   spi@53000000:slot@0: 0
     In:    serial@38000000
     Out:   serial@38000000
     Err:   serial@38000000
-    =>
-
-Loading Images
-^^^^^^^^^^^^^^
-
-To load a kernel, transfer it over serial.
-
-.. code-block:: none
-
-    => loady 80000000 1500000
-    ## Switch baudrate to 1500000 bps and press ENTER ...
-
-    *** baud: 1500000
-
-    *** baud: 1500000 ***
-    ## Ready for binary (ymodem) download to 0x80000000 at 1500000 bps...
-    C
-    *** file: loader.bin
-    $ sz -vv loader.bin
-    Sending: loader.bin
-    Bytes Sent:2478208   BPS:72937
-    Sending:
-    Ymodem sectors/kbytes sent:   0/ 0k
-    Transfer complete
-
-    *** exit status: 0 ***
-    ## Total Size      = 0x0025d052 = 2478162 Bytes
-    ## Switch baudrate to 115200 bps and press ESC ...
-
-    *** baud: 115200
-
-    *** baud: 115200 ***
-    =>
+    Hit any key to stop autoboot:  0
+    SF: Detected w25q128fw with page size 256 Bytes, erase size 4 KiB, total 16 MiB
+    Reading 5242880 byte(s) at offset 0x00000000
+    ## Starting application at 0x80000000 ...
 
 Running Programs
 ^^^^^^^^^^^^^^^^
@@ -162,6 +134,62 @@ To run legacy images, use the ``bootm`` command:
     argc = 0
     argv[0] = "<NULL>"
     Hit any key to exit ...
+
+Flashing Images
+---------------
+
+To flash a kernel, transfer it over serial, then write it to the kernel
+partition.
+
+.. code-block:: none
+
+    => loady 80000000 1500000
+    ## Switch baudrate to 1500000 bps and press ENTER ...
+
+    *** baud: 1500000
+
+    *** baud: 1500000 ***
+    ## Ready for binary (ymodem) download to 0x80000000 at 1500000 bps...
+    C
+    *** file: loader.bin
+    $ sz -vv loader.bin
+    Sending: loader.bin
+    Bytes Sent:2478208   BPS:72937
+    Sending:
+    Ymodem sectors/kbytes sent:   0/ 0k
+    Transfer complete
+
+    *** exit status: 0 ***
+    ## Total Size      = 0x0025d052 = 2478162 Bytes
+    ## Switch baudrate to 115200 bps and press ESC ...
+
+    *** baud: 115200
+
+    *** baud: 115200 ***
+    => sf probe
+    SF: Detected w25q128fw with page size 256 Bytes, erase size 4 KiB, total 16 MiB
+    => mtd write kernel 80000000 0 25d052
+    Writing 2478162 byte(s) at offset 0x00000000
+
+Partition Scheme
+^^^^^^^^^^^^^^^^
+
+There is no partition scheme specified by the manufacturer. The only requirement
+imposed by the firmware is that offset 0 will be loaded and ran. The default
+partition scheme is
+
+========= ======== ======
+Partition Offset   Size
+========= ======== ======
+u-boot    0x000000 496k
+env       0x07C000 16k
+kernel    0x080000 5M
+data      0x580000 10.5M
+========= ======== ======
+
+**NB:** kflash adds a 5-byte header to payloads (and a 32-byte trailer) to all
+payloads it flashes. If you use kflash to flash your payload, you will need to
+account for this header when specifying what offset in spi flash to load from.
 
 Pin Assignment
 --------------

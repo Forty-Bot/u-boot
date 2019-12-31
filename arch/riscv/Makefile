@@ -30,6 +30,12 @@ ARCH_FLAGS = -march=$(ARCH_BASE)$(ARCH_A)$(ARCH_C) -mabi=$(ABI) \
 PLATFORM_CPPFLAGS	+= $(ARCH_FLAGS)
 CFLAGS_EFI		+= $(ARCH_FLAGS)
 
+machine-$(CONFIG_ARCH_K210) += k210
+
+machdirs := $(patsubst %,arch/riscv/mach-%/,$(machine-y))
+PLATFORM_CPPFLAGS += $(patsubst %,-I$(srctree)/%include,$(machdirs))
+libs-y += $(machdirs)
+
 head-y := arch/riscv/cpu/start.o
 
 libs-y += arch/riscv/cpu/

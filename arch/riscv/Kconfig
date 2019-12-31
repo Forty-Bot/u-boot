@@ -196,6 +196,14 @@ config RISCV_RDTIME
 	  standard rdtime instruction. This is the case for S-mode U-Boot, and
 	  is useful for processors that support rdtime in M-mode too.
 
+config K210_SYSCTL
+	bool
+	select SYSCON
+	select SPL_SYSCON if SPL
+	help
+	  The K210 sysctl block holds memory-mapped control and status
+	  registers associated with clocks, resets, power, and dma handshakes.
+
 config SYS_MALLOC_F_LEN
 	default 0x1000
 
@@ -236,5 +244,8 @@ config STACK_SIZE_SHIFT
 
 config SPL_LDSCRIPT
 	default "arch/riscv/cpu/u-boot-spl.lds"
+
+config ARCH_K210
+	bool "Support Kendryte K210 SOCs"
 
 endmenu

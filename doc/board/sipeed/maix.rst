@@ -46,6 +46,7 @@ Boot output should look like the following:
     U-Boot 2020.04-rc2-00087-g2221cc09c1-dirty (Feb 28 2020 - 13:53:09 -0500)
 
     DRAM:  8 MiB
+    WDT:   Started with servicing (60s timeout)
     In:    serial@38000000
     Out:   serial@38000000
     Err:   serial@38000000

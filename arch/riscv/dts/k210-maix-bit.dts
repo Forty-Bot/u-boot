@@ -45,3 +45,7 @@
 &i2s0 {
 	#sound-dai-cells = <1>;
 };
+
+&wdt0 {
+	status = "okay";
+};

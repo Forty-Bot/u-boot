@@ -18,6 +18,9 @@ config SYS_CONFIG_NAME
 config SYS_TEXT_BASE
 	default 0x80000000
 
+config DEFAULT_DEVICE_TREE
+	default "k210-maix-bit"
+
 config NR_CPUS
 	default 2
 

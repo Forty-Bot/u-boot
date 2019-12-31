@@ -15,4 +15,5 @@ Board-specific doc
    intel/index
    renesas/index
    sifive/index
+   sipeed/index
    xilinx/index

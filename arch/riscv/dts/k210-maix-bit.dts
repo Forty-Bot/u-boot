@@ -17,6 +17,22 @@
 		stdout-path = "serial0:115200";
 	};
 
+	gpio-leds {
+		compatible = "gpio-leds";
+
+		green {
+			gpios = <&gpio1_0 4 GPIO_ACTIVE_LOW>;
+		};
+
+		red {
+			gpios = <&gpio1_0 5 GPIO_ACTIVE_LOW>;
+		};
+
+		blue {
+			gpios = <&gpio1_0 6 GPIO_ACTIVE_LOW>;
+		};
+	};
+
 	sound {
 		compatible = "simple-audio-card";
 		simple-audio-card,format = "i2s";
@@ -39,9 +55,189 @@
 };
 
 &uarths0 {
+	pinctrl-0 = <&fpioa_uarths>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&gpio0 {
+	pinctrl-0 = <&fpioa_gpiohs>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&gpio1 {
+	pinctrl-0 = <&fpioa_gpio>;
+	pinctrl-names = "default";
 	status = "okay";
 };
 
 &i2s0 {
 	#sound-dai-cells = <1>;
+	pinctrl-0 = <&fpioa_i2s0>;
+	pinctrl-names = "default";
+};
+
+&fpioa {
+	status = "okay";
+
+	fpioa_uarths: uarths {
+		rx {
+			function = "UARTHS_RX";
+			pins = "IO_4";
+		};
+		tx {
+			function = "UARTHS_TX";
+			pins = "IO_5";
+		};
+	};
+
+	fpioa_gpiohs: gpiohs {
+		1 {
+			function = "GPIOHS1";
+			pins = "IO_6";
+		};
+		2 {
+			function = "GPIOHS2";
+			pins = "IO_7";
+		};
+		3 {
+			function = "GPIOHS3";
+			pins = "IO_17";
+		};
+		4 {
+			function = "GPIOHS4";
+			pins = "IO_21";
+		};
+		5 {
+			function = "GPIOHS5";
+			pins = "IO_22";
+		};
+		6 {
+			function = "GPIOHS6";
+			pins = "IO_23";
+		};
+		7 {
+			function = "GPIOHS7";
+			pins = "IO_24";
+		};
+		8 {
+			function = "GPIOHS8";
+			pins = "IO_25";
+		};
+		9 {
+			function = "GPIOHS9";
+			pins = "IO_30";
+		};
+		10 {
+			function = "GPIOHS10";
+			pins = "IO_31";
+		};
+		11 {
+			function = "GPIOHS11";
+			pins = "IO_32";
+		};
+		12 {
+			function = "GPIOHS12";
+			pins = "IO_33";
+		};
+		13 {
+			function = "GPIOHS13";
+			pins = "IO_34";
+		};
+		14 {
+			function = "GPIOHS14";
+			pins = "IO_35";
+		};
+	};
+
+	fpioa_gpio: gpio {
+		0 {
+			function = "GPIO0";
+			pins = "IO_8";
+		};
+		1 {
+			function = "GPIO1";
+			pins = "IO_9";
+		};
+		2 {
+			function = "GPIO2";
+			pins = "IO_10";
+		};
+		3 {
+			function = "GPIO3";
+			pins = "IO_11";
+		};
+		4 {
+			function = "GPIO4";
+			pins = "IO_12";
+		};
+		5 {
+			function = "GPIO5";
+			pins = "IO_13";
+		};
+		6 {
+			function = "GPIO6";
+			pins = "IO_14";
+		};
+		7 {
+			function = "GPIO7";
+			pins = "IO_15";
+		};
+	};
+
+	fpioa_i2s0: i2s0 {
+		bck {
+			function = "I2S0_SCLK";
+			pins = "IO_18";
+		};
+		ws {
+			function = "I2S0_WS";
+			pins = "IO_19";
+		};
+		dat {
+			function = "I2S0_IN_D0";
+			pins = "IO_20";
+		};
+	};
+
+	fpioa_dvp: dvp {
+		sda {
+			function = "SCCP_SDA";
+			pins = "IO_40";
+		};
+		sck {
+			function = "SCCP_SCLK";
+			pins = "IO_41";
+		};
+		rst {
+			function = "DVP_RST";
+			pins = "IO_42";
+		};
+		vsync {
+			function = "DVP_VSYNC";
+			pins = "IO_43";
+		};
+		pwdn {
+			function = "DVP_PWDN";
+			pins = "IO_44";
+		};
+		hsync {
+			function = "DVP_HSYNC";
+			pins = "IO_45";
+		};
+		xclk {
+			function = "DVP_XCLK";
+			pins = "IO_46";
+		};
+		pclk {
+			function = "DVP_PCLK";
+			pins = "IO_47";
+		};
+	};
+};
+
+&dvp0 {
+	pinctrl-0 = <&fpioa_dvp>;
+	pinctrl-names = "default";
 };

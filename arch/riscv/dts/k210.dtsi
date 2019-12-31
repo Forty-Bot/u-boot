@@ -230,6 +230,14 @@
 					interrupts = <23>;
 					gpio-controller;
 					snps,nr-gpios = <8>;
+
+					isp {
+						gpio-hog;
+						gpios = <0 0>;
+						input;
+						pinctrl-0 = <&fpioa_isp>;
+						pinctrl-names = "default";
+					};
 				};
 			};
 
@@ -367,7 +375,37 @@
 				reg = <0x502B0000 0x100>;
 				clocks = <&sysclk K210_CLK_FPIOA>;
 				resets = <&sysrst K210_RST_FPIOA>;
+				kendryte,sysctl = <&sysctl>;
+				kendryte,power-offset = <K210_SYSCTL_POWER_SEL>;
+				pinctrl-0 = <&fpioa_jtag>;
+				pinctrl-names = "default";
 				status = "disabled";
+
+				fpioa_jtag: jtag {
+					tck {
+						function = "JTAG_TCLK";
+						pins = "IO_0";
+					};
+					tdi {
+						function = "JTAG_TDI";
+						pins = "IO_1";
+					};
+					tms {
+						function = "JTAG_TMS";
+						pins = "IO_2";
+					};
+					tdo {
+						function = "JTAG_TDO";
+						pins = "IO_3";
+					};
+				};
+
+				fpioa_isp: isp {
+					isp {
+						function = "GPIOHS0";
+						pins = "IO_16";
+					};
+				};
 			};
 
 			sha256: sha256@502C0000 {

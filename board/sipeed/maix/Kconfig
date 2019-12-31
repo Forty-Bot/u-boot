@@ -37,6 +37,7 @@ config BOARD_SPECIFIC_OPTIONS
 	select ARCH_K210
 	imply SIFIVE_CLINT
 	imply K210_SYSCTL
+	imply CLK_K210
 	imply SPI
 	imply DM_GPIO
 	imply CMD_GPIO

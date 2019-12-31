@@ -1,0 +1,7 @@
+config CLK_K210
+	bool "Clock support for Kendryte K210"
+	depends on K210_SYSCTL
+	select CLK
+	select CLK_CCF
+	help
+	  This enables support clock driver for Kendryte K210 platforms.

@@ -29,6 +29,8 @@ static int riscv_cpu_get_info(struct udevice *dev, struct cpu_info *info)
 {
 	const char *mmu;
 
+	/* Zero out the frequency, in case sizeof(ulong) != sizeof(u32) */
+	info->cpu_freq = 0;
 	dev_read_u32(dev, "clock-frequency", (u32 *)&info->cpu_freq);
 
 	mmu = dev_read_string(dev, "mmu-type");

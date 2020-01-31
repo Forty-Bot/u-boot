@@ -9,7 +9,8 @@
 #include <reset.h>
 #include <wdt.h>
 #include <asm/io.h>
-#include <asm/utils.h>
+#include <log2.h>
+#include <watchdog.h>
 
 #define DW_WDT_CR	0x00
 #define DW_WDT_TORR	0x04

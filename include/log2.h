@@ -4,8 +4,8 @@
  * Texas Instruments, <www.ti.com>
  * Aneesh V <aneesh@ti.com>
  */
-#ifndef _UTILS_H_
-#define _UTILS_H_
+#ifndef _LOG2_H_
+#define _LOG2_H_
 
 static inline s32 log_2_n_round_up(u32 n)
 {

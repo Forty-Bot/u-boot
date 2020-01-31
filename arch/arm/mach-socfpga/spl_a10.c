@@ -9,7 +9,7 @@
 #include <asm/io.h>
 #include <asm/pl310.h>
 #include <asm/u-boot.h>
-#include <asm/utils.h>
+#include <log2.h>
 #include <image.h>
 #include <asm/arch/reset_manager.h>
 #include <spl.h>

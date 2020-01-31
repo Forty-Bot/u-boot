@@ -8,7 +8,7 @@
 #include <hang.h>
 #include <spl.h>
 #include <asm/u-boot.h>
-#include <asm/utils.h>
+#include <log2.h>
 #include <nand.h>
 #include <asm/arch/dm365_lowlevel.h>
 #include <ns16550.h>

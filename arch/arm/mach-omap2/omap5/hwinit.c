@@ -19,7 +19,7 @@
 #include <asm/arch/sys_proto.h>
 #include <asm/arch/clock.h>
 #include <linux/sizes.h>
-#include <asm/utils.h>
+#include <log2.h>
 #include <asm/arch/gpio.h>
 #include <asm/emif.h>
 #include <asm/omap_common.h>

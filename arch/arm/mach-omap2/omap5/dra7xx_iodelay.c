@@ -8,7 +8,7 @@
 
 #include <common.h>
 #include <hang.h>
-#include <asm/utils.h>
+#include <log2.h>
 #include <asm/arch/dra7xx_iodelay.h>
 #include <asm/arch/omap.h>
 #include <asm/arch/sys_proto.h>

@@ -17,7 +17,7 @@
 #include <asm/arch/sys_proto.h>
 #include <asm/omap_common.h>
 #include <asm/omap_sec_common.h>
-#include <asm/utils.h>
+#include <log2.h>
 #include <linux/compiler.h>
 #include <asm/ti-common/ti-edma3.h>
 

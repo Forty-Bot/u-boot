@@ -11,7 +11,7 @@
 #include <common.h>
 #include <asm/emif.h>
 #include <asm/arch/sys_proto.h>
-#include <asm/utils.h>
+#include <log2.h>
 
 #ifndef CONFIG_SYS_EMIF_PRECALCULATED_TIMING_REGS
 u32 *const T_num = (u32 *)OMAP_SRAM_SCRATCH_EMIF_T_NUM;

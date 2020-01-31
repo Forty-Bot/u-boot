@@ -5,8 +5,10 @@
 
 #include <common.h>
 #include <asm/io.h>
+#include <clk.h>
 #include <log2.h>
 #include <watchdog.h>
+#include <wdt.h>
 
 #define DW_WDT_CR	0x00
 #define DW_WDT_TORR	0x04
@@ -90,3 +92,68 @@ void hw_watchdog_init(void)
 	designware_wdt_init(&wdt_priv, CONFIG_WATCHDOG_TIMEOUT_MSECS);
 }
 #endif
+
+#ifdef CONFIG_WDT
+static int dw_wdt_reset(struct udevice *dev)
+{
+	struct designware_wdt_priv *priv = dev_get_priv(dev);
+
+	designware_wdt_reset(priv);
+
+	return 0;
+}
+
+static int dw_wdt_start(struct udevice *dev, u64 timeout, ulong flags)
+{
+	struct designware_wdt_priv *priv = dev_get_priv(dev);
+
+	designware_wdt_init(priv, timeout);
+
+	return 0;
+}
+
+static int dw_wdt_probe(struct udevice *dev)
+{
+	int ret;
+	ulong rate;
+	struct clk clk;
+	struct designware_wdt_priv *priv = dev_get_priv(dev);
+
+	priv->base = dev_read_addr_ptr(dev);
+	if (!priv->base)
+		return -ENOENT;
+
+	ret = clk_get_by_index(dev, 0, &clk);
+	if (ret)
+		return ret;
+
+	rate = clk_get_rate(&clk);
+	if (IS_ERR_VALUE(rate)) {
+		clk_free(&clk);
+		return rate;
+	}
+	priv->clock_khz = rate / 1000;
+
+	return 0;
+}
+
+static const struct wdt_ops dw_wdt_ops = {
+	.start		= dw_wdt_start,
+	.reset		= dw_wdt_reset,
+};
+
+static const struct udevice_id dw_wdt_ids[] = {
+	{ .compatible = "snps,dw-wdt" },
+	{ },
+};
+
+U_BOOT_DRIVER(designware_wdt) = {
+	.name		= "designware_wdt",
+	.id		= UCLASS_WDT,
+	.of_match	= dw_wdt_ids,
+	.probe		= dw_wdt_probe,
+	.ops		= &dw_wdt_ops,
+	.priv_auto_alloc_size = sizeof(struct designware_wdt_priv),
+	.flags		= DM_FLAG_PRE_RELOC,
+};
+#endif /* WDT */

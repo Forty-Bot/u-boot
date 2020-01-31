@@ -17,57 +17,76 @@
 #define DW_WDT_CR_RMOD_VAL	0x00
 #define DW_WDT_CRR_RESTART_VAL	0x76
 
+struct designware_wdt_priv {
+	void __iomem *base;
+	ulong clock_khz;
+};
+
 /*
  * Set the watchdog time interval.
  * Counter is 32 bit.
  */
-static int designware_wdt_settimeout(unsigned int timeout)
+static int designware_wdt_settimeout(struct designware_wdt_priv *priv,
+				     u64 timeout)
 {
 	signed int i;
 
 	/* calculate the timeout range value */
-	i = (log_2_n_round_up(timeout * CONFIG_DW_WDT_CLOCK_KHZ)) - 16;
+	i = log_2_n_round_up(timeout * priv->clock_khz) - 16;
 	if (i > 15)
 		i = 15;
 	if (i < 0)
 		i = 0;
 
-	writel((i | (i << 4)), (CONFIG_DW_WDT_BASE + DW_WDT_TORR));
+	writel(i | (i << 4), priv->base + DW_WDT_TORR);
 	return 0;
 }
 
-static void designware_wdt_enable(void)
+static void designware_wdt_enable(struct designware_wdt_priv *priv)
 {
-	writel(((DW_WDT_CR_RMOD_VAL << DW_WDT_CR_RMOD_OFFSET) |
-	      (0x1 << DW_WDT_CR_EN_OFFSET)),
-	      (CONFIG_DW_WDT_BASE + DW_WDT_CR));
+	writel((DW_WDT_CR_RMOD_VAL << DW_WDT_CR_RMOD_OFFSET) |
+	       (0x1 << DW_WDT_CR_EN_OFFSET), priv->base + DW_WDT_CR);
 }
 
-static unsigned int designware_wdt_is_enabled(void)
+static unsigned int designware_wdt_is_enabled(struct designware_wdt_priv *priv)
 {
 	unsigned long val;
-	val = readl((CONFIG_DW_WDT_BASE + DW_WDT_CR));
-	return val & 0x1;
+	val = readl(priv->base + DW_WDT_CR);
+	return val & 1;
 }
 
-#if defined(CONFIG_HW_WATCHDOG)
+static void designware_wdt_reset(struct designware_wdt_priv *priv)
+{
+	if (designware_wdt_is_enabled(priv))
+		writel(DW_WDT_CRR_RESTART_VAL, priv->base + DW_WDT_CRR);
+}
+
+static void designware_wdt_init(struct designware_wdt_priv *priv, u64 timeout)
+{
+	/* reset to disable the watchdog */
+	designware_wdt_reset(priv);
+	/* set timer in miliseconds */
+	designware_wdt_settimeout(priv, timeout);
+	designware_wdt_enable(priv);
+	designware_wdt_reset(priv);
+}
+
+#ifdef CONFIG_HW_WATCHDOG
+static struct designware_wdt_priv wdt_priv = {
+	.base = CONFIG_DW_WDT_BASE,
+};
+
 void hw_watchdog_reset(void)
 {
-	if (designware_wdt_is_enabled())
-		/* restart the watchdog counter */
-		writel(DW_WDT_CRR_RESTART_VAL,
-		       (CONFIG_DW_WDT_BASE + DW_WDT_CRR));
+	/* XXX: may contain a function call; must be done at runtime */
+	wdt_priv.clock_khz = CONFIG_DW_WDT_CLOCK_KHZ;
+	designware_wdt_reset(&wdt_priv);
 }
 
 void hw_watchdog_init(void)
 {
-	/* reset to disable the watchdog */
-	hw_watchdog_reset();
-	/* set timer in miliseconds */
-	designware_wdt_settimeout(CONFIG_WATCHDOG_TIMEOUT_MSECS);
-	/* enable the watchdog */
-	designware_wdt_enable();
-	/* reset the watchdog */
-	hw_watchdog_reset();
+	/* XXX: see above */
+	wdt_priv.clock_khz = CONFIG_DW_WDT_CLOCK_KHZ;
+	designware_wdt_init(&wdt_priv, CONFIG_WATCHDOG_TIMEOUT_MSECS);
 }
 #endif

@@ -176,6 +176,13 @@ config WDT_TANGIER
 	  Intel Tangier SoC. If you're using a board with Intel Tangier
 	  SoC, say Y here.
 
+config DESIGNWARE_WATCHDOG
+	bool "Synopsys Designware watchdog timer support"
+	select HW_WATCHDOG if !WDT
+	help
+	  Enable support for the Synopsys Designware watchdog timer, which can
+	  be found on Altera socfpgas, and on Kendryte CPUs.
+
 config SPL_WDT
 	bool "Enable driver model for watchdog timer drivers in SPL"
 	depends on SPL_DM

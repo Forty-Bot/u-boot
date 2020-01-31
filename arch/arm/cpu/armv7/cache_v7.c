@@ -8,7 +8,7 @@
 #include <linux/types.h>
 #include <common.h>
 #include <asm/armv7.h>
-#include <asm/utils.h>
+#include <log2.h>
 
 #define ARMV7_DCACHE_INVAL_RANGE	1
 #define ARMV7_DCACHE_CLEAN_INVAL_RANGE	2

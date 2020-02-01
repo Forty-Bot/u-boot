@@ -929,6 +929,12 @@
 		compatible = "sandbox,mdio";
 	};
 
+	pm-bus-test {
+		compatible = "simple-pm-bus";
+		clocks = <&clk_sandbox 4>;
+		power-domains = <&pwrdom 1>;
+	};
+
 	resetc2: syscon-reset {
 		compatible = "syscon-reset";
 		#reset-cells = <1>;

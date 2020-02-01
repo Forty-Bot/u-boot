@@ -5,6 +5,11 @@
 
 #include <common.h>
 #include <dm.h>
+#include <clk.h>
+
+#define SIMPLE_BUS 0
+#define SIMPLE_MFD 1
+#define SIMPLE_PM_BUS 2
 
 struct simple_bus_plat {
 	u32 base;
@@ -50,9 +55,55 @@ UCLASS_DRIVER(simple_bus) = {
 	.per_device_platdata_auto_alloc_size = sizeof(struct simple_bus_plat),
 };
 
+static const int generic_simple_bus_probe(struct udevice *dev)
+{
+#if CONFIG_IS_ENABLED(CLK)
+	int ret;
+	struct clk_bulk *bulk;
+	ulong type = dev_get_driver_data(dev);
+
+	if (type == SIMPLE_PM_BUS) {
+		bulk = kzalloc(sizeof(*bulk), GFP_KERNEL);
+		if (!bulk)
+			return -ENOMEM;
+
+		ret = clk_get_bulk(dev, bulk);
+		if (ret)
+			return ret;
+		
+		ret = clk_enable_bulk(bulk);
+		if (ret && ret != -ENOSYS && ret != -ENOTSUPP) {
+			clk_release_bulk(bulk);
+			return ret;
+		}
+		dev->priv = bulk;
+	}
+#endif
+	return 0;
+}
+
+static const int generic_simple_bus_remove(struct udevice *dev)
+{
+	int ret = 0;
+#if CONFIG_IS_ENABLED(CLK)
+	struct clk_bulk *bulk;
+	ulong type = dev_get_driver_data(dev);
+
+	if (type == SIMPLE_PM_BUS) {
+		bulk = dev_get_priv(dev);
+		ret = clk_release_bulk(bulk);
+		kfree(bulk);
+		if (ret == -ENOSYS)
+			ret = 0;
+	}
+#endif
+	return ret;
+}
+
 static const struct udevice_id generic_simple_bus_ids[] = {
-	{ .compatible = "simple-bus" },
-	{ .compatible = "simple-mfd" },
+	{ .compatible = "simple-bus", .data = SIMPLE_BUS },
+	{ .compatible = "simple-mfd", .data = SIMPLE_MFD },
+	{ .compatible = "simple-pm-bus", .data = SIMPLE_PM_BUS },
 	{ }
 };
 
@@ -60,5 +111,7 @@ U_BOOT_DRIVER(simple_bus_drv) = {
 	.name	= "generic_simple_bus",
 	.id	= UCLASS_SIMPLE_BUS,
 	.of_match = generic_simple_bus_ids,
+	.probe = generic_simple_bus_probe,
+	.remove = generic_simple_bus_remove,
 	.flags	= DM_FLAG_PRE_RELOC,
 };

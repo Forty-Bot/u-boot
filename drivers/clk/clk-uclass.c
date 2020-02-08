@@ -237,8 +237,8 @@ static int clk_set_default_parents(struct udevice *dev, int stage)
 			continue;
 
 		if (ret < 0) {
-			debug("%s: failed to reparent clock %d for %s\n",
-			      __func__, index, dev_read_name(dev));
+			debug("%s: failed to reparent clock %d for %s (err = %d)\n",
+			      __func__, index, dev_read_name(dev), ret);
 			return ret;
 		}
 	}
@@ -295,8 +295,8 @@ static int clk_set_default_rates(struct udevice *dev, int stage)
 		ret = clk_set_rate(&clk, rates[index]);
 
 		if (ret < 0) {
-			debug("%s: failed to set rate on clock index %d (%ld) for %s\n",
-			      __func__, index, clk.id, dev_read_name(dev));
+			debug("%s: failed to set rate on clock index %d (%ld) for %s (err = %d)\n",
+			      __func__, index, clk.id, dev_read_name(dev), ret);
 			break;
 		}
 	}
@@ -437,7 +437,7 @@ ulong clk_get_rate(struct clk *clk)
 {
 	const struct clk_ops *ops;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p \"%s\")\n", __func__, clk, clk->dev->name);
 	if (!clk_valid(clk))
 		return 0;
 	ops = clk_dev_ops(clk->dev);
@@ -453,7 +453,7 @@ struct clk *clk_get_parent(struct clk *clk)
 	struct udevice *pdev;
 	struct clk *pclk;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p) \"%s\"\n", __func__, clk, clk->dev->name);
 	if (!clk_valid(clk))
 		return NULL;
 
@@ -470,7 +470,7 @@ long long clk_get_parent_rate(struct clk *clk)
 	const struct clk_ops *ops;
 	struct clk *pclk;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p \"%s\")\n", __func__, clk, clk->dev->name);
 	if (!clk_valid(clk))
 		return 0;
 
@@ -493,7 +493,8 @@ ulong clk_set_rate(struct clk *clk, ulong rate)
 {
 	const struct clk_ops *ops;
 
-	debug("%s(clk=%p, rate=%lu)\n", __func__, clk, rate);
+	debug("%s(clk=%p \"%s\", rate=%lu)\n", __func__, clk, clk->dev->name,
+	      rate);
 	if (!clk_valid(clk))
 		return 0;
 	ops = clk_dev_ops(clk->dev);
@@ -508,7 +509,8 @@ int clk_set_parent(struct clk *clk, struct clk *parent)
 {
 	const struct clk_ops *ops;
 
-	debug("%s(clk=%p, parent=%p)\n", __func__, clk, parent);
+	debug("%s(clk=%p \"%s\", parent=%p \"%s\")\n", __func__, clk,
+	      clk->dev->name, parent, parent->dev->name);
 	if (!clk_valid(clk))
 		return 0;
 	ops = clk_dev_ops(clk->dev);
@@ -524,7 +526,7 @@ int clk_enable(struct clk *clk)
 	const struct clk_ops *ops;
 	int ret;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p \"%s\")\n", __func__, clk, clk->dev->name);
 	if (!clk_valid(clk))
 		return 0;
 	ops = clk_dev_ops(clk->dev);
@@ -580,7 +582,7 @@ int clk_disable(struct clk *clk)
 	const struct clk_ops *ops;
 	int ret;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p) \"%s\"\n", __func__, clk, clk->dev->name);
 	if (!clk_valid(clk))
 		return 0;
 	ops = clk_dev_ops(clk->dev);

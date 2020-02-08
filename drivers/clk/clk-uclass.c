@@ -405,7 +405,7 @@ ulong clk_get_rate(struct clk *clk)
 {
 	const struct clk_ops *ops;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p \"%s\")\n", __func__, clk, clk->dev->name);
 	if (!clk)
 		return 0;
 	ops = clk_dev_ops(clk->dev);
@@ -421,7 +421,7 @@ struct clk *clk_get_parent(struct clk *clk)
 	struct udevice *pdev;
 	struct clk *pclk;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p) \"%s\"\n", __func__, clk, clk->dev->name);
 	if (!clk)
 		return NULL;
 
@@ -438,7 +438,7 @@ long long clk_get_parent_rate(struct clk *clk)
 	const struct clk_ops *ops;
 	struct clk *pclk;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p \"%s\")\n", __func__, clk, clk->dev->name);
 	if (!clk)
 		return 0;
 
@@ -461,7 +461,7 @@ ulong clk_set_rate(struct clk *clk, ulong rate)
 {
 	const struct clk_ops *ops;
 
-	debug("%s(clk=%p, rate=%lu)\n", __func__, clk, rate);
+	debug("%s(clk=%p \"%s\", rate=%lu)\n", __func__, clk, clk->dev->name, rate);
 	if (!clk)
 		return 0;
 	ops = clk_dev_ops(clk->dev);
@@ -476,7 +476,8 @@ int clk_set_parent(struct clk *clk, struct clk *parent)
 {
 	const struct clk_ops *ops;
 
-	debug("%s(clk=%p, parent=%p)\n", __func__, clk, parent);
+	debug("%s(clk=%p \"%s\", parent=%p \"%s\")\n", __func__, clk,
+	      clk->dev->name, parent, parent->dev->name);
 	if (!clk)
 		return 0;
 	ops = clk_dev_ops(clk->dev);
@@ -493,7 +494,7 @@ int clk_enable(struct clk *clk)
 	struct clk *clkp = NULL;
 	int ret;
 
-	debug("%s(clk=%p)\n", __func__, clk);
+	debug("%s(clk=%p \"%s\")\n", __func__, clk, clk->dev->name);
 	if (!clk)
 		return 0;
 	ops = clk_dev_ops(clk->dev);

@@ -304,6 +304,9 @@ int uclass_find_device_by_seq(enum uclass_id id, int seq_or_req_seq,
 	struct udevice *dev;
 	int ret;
 
+#define saved_log_debug log_debug
+#undef log_debug
+#define log_debug(...)
 	*devp = NULL;
 	log_debug("%d %d\n", find_req_seq, seq_or_req_seq);
 	if (seq_or_req_seq == -1)
@@ -323,6 +326,8 @@ int uclass_find_device_by_seq(enum uclass_id id, int seq_or_req_seq,
 		}
 	}
 	log_debug("   - not found\n");
+#undef log_debug
+#define log_debug saved_log_debug
 
 	return -ENODEV;
 }

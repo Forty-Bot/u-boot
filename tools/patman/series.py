@@ -170,10 +170,8 @@ class Series(dict):
                 out = sorted(out)
             if have_changes:
                 out.insert(0, line)
-            else:
-                out = [line + ' None']
-            if need_blank:
-                out.insert(0, '')
+                if need_blank:
+                    out.insert(0, '')
             final += out
             need_blank = have_changes
         if self.changes:

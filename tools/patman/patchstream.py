@@ -578,9 +578,5 @@ def InsertCoverLetter(fname, series, count):
             line = '\n'.join(text[1:]) + '\n'
             if series.get('notes'):
                 line += '\n'.join(series.notes) + '\n'
-
-            # Now the change list
-            out = series.MakeChangeLog(None)
-            line += '\n' + '\n'.join(out)
         fd.write(line)
     fd.close()

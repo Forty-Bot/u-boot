@@ -3,6 +3,7 @@
  * Designware master SPI core controller driver
  *
  * Copyright (C) 2014 Stefan Roese <sr@denx.de>
+ * Copyright (C) 2020 Sean Anderson <seanga2@gmail.com>
  *
  * Very loosely based on the Linux driver:
  * drivers/spi/spi-dw.c, which is:
@@ -51,20 +52,14 @@
 #define DW_SPI_DR			0x60
 
 /* Bit fields in CTRLR0 */
-#define SPI_DFS_OFFSET			0
-
-#define SPI_FRF_OFFSET			4
 #define SPI_FRF_SPI			0x0
 #define SPI_FRF_SSP			0x1
 #define SPI_FRF_MICROWIRE		0x2
 #define SPI_FRF_RESV			0x3
 
-#define SPI_MODE_OFFSET			6
-#define SPI_SCPH_OFFSET			6
-#define SPI_SCOL_OFFSET			7
+#define SPI_MODE_SCPH			0x1
+#define SPI_MODE_SCOL			0x2
 
-#define SPI_TMOD_OFFSET			8
-#define SPI_TMOD_MASK			(0x3 << SPI_TMOD_OFFSET)
 #define	SPI_TMOD_TR			0x0		/* xmit & recv */
 #define SPI_TMOD_TO			0x1		/* xmit only */
 #define SPI_TMOD_RO			0x2		/* recv only */
@@ -89,6 +84,12 @@
 struct dw_spi_platdata {
 	s32 frequency;		/* Default clock frequency, -1 for none */
 	void __iomem *regs;
+
+	/* Offsets in CTRL0 */
+	u8 dfs_off;
+	u8 frf_off;
+	u8 tmod_off;
+	u8 mode_off;
 };
 
 struct dw_spi_priv {
@@ -114,6 +115,15 @@ struct dw_spi_priv {
 
 	struct reset_ctl_bulk	resets;
 };
+
+static inline u32 GEN_CTRL0(struct dw_spi_priv *priv,
+			    struct dw_spi_platdata *plat)
+{
+	return ((priv->bits_per_word - 1) << plat->dfs_off |
+	      (priv->type << plat->frf_off) |
+	      (priv->mode << plat->mode_off) |
+	      (priv->tmode << plat->tmod_off));
+}
 
 static inline u32 dw_read(struct dw_spi_priv *priv, u32 offset)
 {
@@ -160,6 +170,10 @@ static int dw_spi_ofdata_to_platdata(struct udevice *bus)
 	/* Use 500KHz as a suitable default */
 	plat->frequency = dev_read_u32_default(bus, "spi-max-frequency",
 					       500000);
+	plat->dfs_off = dev_read_u32_default(bus, "snps,dfs-offset", 0);
+	plat->frf_off = dev_read_u32_default(bus, "snps,frf-offset", 4);
+	plat->mode_off = dev_read_u32_default(bus, "snps,mode-offset", 6);
+	plat->tmod_off = dev_read_u32_default(bus, "snps,tmod-offset", 8);
 	debug("%s: regs=%p max-frequency=%d\n", __func__, plat->regs,
 	      plat->frequency);
 
@@ -388,6 +402,7 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 		       const void *dout, void *din, unsigned long flags)
 {
 	struct udevice *bus = dev->parent;
+	struct dw_spi_platdata *plat = dev_get_platdata(bus);
 	struct dw_spi_priv *priv = dev_get_priv(bus);
 	const u8 *tx = dout;
 	u8 *rx = din;
@@ -406,10 +421,6 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	if (flags & SPI_XFER_BEGIN)
 		external_cs_manage(dev, false);
 
-	cr0 = (priv->bits_per_word - 1) | (priv->type << SPI_FRF_OFFSET) |
-		(priv->mode << SPI_MODE_OFFSET) |
-		(priv->tmode << SPI_TMOD_OFFSET);
-
 	if (rx && tx)
 		priv->tmode = SPI_TMOD_TR;
 	else if (rx)
@@ -421,8 +432,7 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 		 */
 		priv->tmode = SPI_TMOD_TR;
 
-	cr0 &= ~SPI_TMOD_MASK;
-	cr0 |= (priv->tmode << SPI_TMOD_OFFSET);
+	cr0 = GEN_CTRL0(priv, plat);
 
 	priv->len = bitlen >> 3;
 	debug("%s: rx=%p tx=%p len=%d [bytes]\n", __func__, rx, tx, priv->len);
@@ -476,7 +486,7 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 
 static int dw_spi_set_speed(struct udevice *bus, uint speed)
 {
-	struct dw_spi_platdata *plat = bus->platdata;
+	struct dw_spi_platdata *plat = dev_get_platdata(bus);
 	struct dw_spi_priv *priv = dev_get_priv(bus);
 	u16 clk_div;
 

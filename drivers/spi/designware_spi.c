@@ -3,6 +3,7 @@
  * Designware master SPI core controller driver
  *
  * Copyright (C) 2014 Stefan Roese <sr@denx.de>
+ * Copyright (C) 2020 Sean Anderson <seanga2@gmail.com>
  *
  * Very loosely based on the Linux driver:
  * drivers/spi/spi-dw.c, which is:
@@ -22,6 +23,7 @@
 #include <reset.h>
 #include <dm/device_compat.h>
 #include <linux/bitops.h>
+#include <linux/bitfield.h>
 #include <linux/compat.h>
 #include <linux/iopoll.h>
 #include <asm/io.h>
@@ -54,28 +56,43 @@
 #define DW_SPI_DR			0x60
 
 /* Bit fields in CTRLR0 */
-#define SPI_DFS_OFFSET			0
+#define CTRLR0_DFS_MASK			GENMASK(3, 0)
 
-#define SPI_FRF_OFFSET			4
-#define SPI_FRF_SPI			0x0
-#define SPI_FRF_SSP			0x1
-#define SPI_FRF_MICROWIRE		0x2
-#define SPI_FRF_RESV			0x3
+#define CTRLR0_FRF_MASK			GENMASK(5, 4)
+#define CTRLR0_FRF_SPI			0x0
+#define CTRLR0_FRF_SSP			0x1
+#define CTRLR0_FRF_MICROWIRE		0x2
+#define CTRLR0_FRF_RESV			0x3
 
-#define SPI_MODE_OFFSET			6
-#define SPI_SCPH_OFFSET			6
-#define SPI_SCOL_OFFSET			7
+#define CTRLR0_MODE_MASK		GENMASK(7, 6)
+#define CTRLR0_MODE_SCPH		0x1
+#define CTRLR0_MODE_SCPOL		0x2
 
-#define SPI_TMOD_OFFSET			8
-#define SPI_TMOD_MASK			(0x3 << SPI_TMOD_OFFSET)
-#define	SPI_TMOD_TR			0x0		/* xmit & recv */
-#define SPI_TMOD_TO			0x1		/* xmit only */
-#define SPI_TMOD_RO			0x2		/* recv only */
-#define SPI_TMOD_EPROMREAD		0x3		/* eeprom read mode */
+#define CTRLR0_TMOD_MASK		GENMASK(9, 8)
+#define	CTRLR0_TMOD_TR			0x0		/* xmit & recv */
+#define CTRLR0_TMOD_TO			0x1		/* xmit only */
+#define CTRLR0_TMOD_RO			0x2		/* recv only */
+#define CTRLR0_TMOD_EPROMREAD		0x3		/* eeprom read mode */
 
-#define SPI_SLVOE_OFFSET		10
-#define SPI_SRL_OFFSET			11
-#define SPI_CFS_OFFSET			12
+#define CTRLR0_SLVOE_OFFSET		10
+#define CTRLR0_SRL_OFFSET		11
+#define CTRLR0_CFS_MASK			GENMASK(15, 12)
+
+/* The next two fields are only present on version 4.* */
+#define CTRLR0_DFS_32_MASK		GENMASK(20, 16)
+
+#define CTRLR0_SPI_FRF_MASK		GENMASK(22, 21)
+#define CTRLR0_SPI_FRF_BYTE		0x0
+#define	CTRLR0_SPI_FRF_DUAL		0x1
+#define	CTRLR0_SPI_FRF_QUAD		0x2
+
+/* Bit fields in CTRLR0 based on DWC_ssi_databook.pdf v1.01a */
+#define DWC_SSI_CTRLR0_DFS_MASK		GENMASK(4, 0)
+#define DWC_SSI_CTRLR0_FRF_MASK		GENMASK(7, 6)
+#define DWC_SSI_CTRLR0_MODE_MASK	GENMASK(9, 8)
+#define DWC_SSI_CTRLR0_TMOD_MASK	GENMASK(11, 10)
+#define DWC_SSI_CTRLR0_SRL_OFFSET	13
+#define DWC_SSI_CTRLR0_SPI_FRF_MASK	GENMASK(23, 22)
 
 /* Bit fields in SR, 7 bits */
 #define SR_MASK				GENMASK(6, 0)	/* cover 7 bits */
@@ -86,6 +103,11 @@
 #define SR_RF_FULL			BIT(4)
 #define SR_TX_ERR			BIT(5)
 #define SR_DCOL				BIT(6)
+
+/* Bit fields in VERSION */
+#define VERSION_MAJOR_MASK		GENMASK(31, 24)
+#define VERSION_MINOR_HIGH_MASK		GENMASK(23, 16)
+#define VERSION_MINOR_LOW_MASK		GENMASK(15, 8)
 
 #define RX_TIMEOUT			1000		/* timeout in ms */
 
@@ -98,6 +120,8 @@ struct dw_spi_priv {
 	struct clk clk;
 	struct reset_ctl_bulk resets;
 	struct gpio_desc cs_gpio;	/* External chip-select gpio */
+
+	u32 (*update_cr0)(struct dw_spi_priv *priv);
 
 	void __iomem *regs;
 	unsigned long bus_clk_rate;
@@ -125,6 +149,86 @@ static inline u32 dw_read(struct dw_spi_priv *priv, u32 offset)
 static inline void dw_write(struct dw_spi_priv *priv, u32 offset, u32 val)
 {
 	__raw_writel(val, priv->regs + offset);
+}
+
+static u32 dw_spi_dw16_update_cr0(struct dw_spi_priv *priv)
+{
+	return FIELD_PREP(CTRLR0_DFS_MASK, priv->bits_per_word - 1)
+	     | FIELD_PREP(CTRLR0_FRF_MASK, priv->type)
+	     | FIELD_PREP(CTRLR0_MODE_MASK, priv->mode)
+	     | FIELD_PREP(CTRLR0_TMOD_MASK, priv->tmode);
+}
+
+static u32 dw_spi_dw32_update_cr0(struct dw_spi_priv *priv)
+{
+	return FIELD_PREP(CTRLR0_DFS_32_MASK, priv->bits_per_word - 1)
+	     | FIELD_PREP(CTRLR0_FRF_MASK, priv->type)
+	     | FIELD_PREP(CTRLR0_MODE_MASK, priv->mode)
+	     | FIELD_PREP(CTRLR0_TMOD_MASK, priv->tmode);
+}
+
+static u32 dw_spi_dwc_update_cr0(struct dw_spi_priv *priv)
+{
+	return FIELD_PREP(DWC_SSI_CTRLR0_DFS_MASK, priv->bits_per_word - 1)
+	     | FIELD_PREP(DWC_SSI_CTRLR0_FRF_MASK, priv->type)
+	     | FIELD_PREP(DWC_SSI_CTRLR0_MODE_MASK, priv->mode)
+	     | FIELD_PREP(DWC_SSI_CTRLR0_TMOD_MASK, priv->tmode);
+}
+
+static int dw_spi_dw16_init(struct udevice *bus, struct dw_spi_priv *priv)
+{
+	priv->update_cr0 = dw_spi_dw16_update_cr0;
+	return 0;
+}
+
+static int dw_spi_dw32_init(struct udevice *bus, struct dw_spi_priv *priv)
+{
+	priv->update_cr0 = dw_spi_dw32_update_cr0;
+	return 0;
+}
+
+static void dw_spi_print_version(struct dw_spi_priv *priv, u32 version,
+				 char *driver)
+{
+	char *fmt;
+
+	if (driver)
+		fmt = "SPI@%p: Device version %c.%c%c%c matches driver version %s\n";
+	else
+		fmt = "SPI@%p: Device version %c.%c%c%c does not match any driver%.0s\n";
+
+	log_info(fmt, priv->regs, version >> 24, version >> 16, version >> 8,
+		 version, driver);
+}
+
+static int dw_spi_dw_generic_init(struct udevice *bus, struct dw_spi_priv *priv)
+{
+	u32 version;
+
+	log_warning("SPI@%p: Compatible string did not specify device version.\n",
+		    priv->regs);
+
+	version = dw_read(priv, DW_SPI_VERSION);
+	switch (FIELD_GET(VERSION_MAJOR_MASK, version)) {
+	case '3':
+		if (FIELD_GET(VERSION_MINOR_HIGH_MASK, version) < '2' ||
+		    FIELD_GET(VERSION_MINOR_LOW_MASK, version) < '3') {
+			dw_spi_print_version(priv, version, "<3.23");
+			return dw_spi_dw16_init(bus, priv);
+		}
+	case '4':
+		dw_spi_print_version(priv, version, ">=3.23");
+		return dw_spi_dw32_init(bus, priv);
+	default:
+		dw_spi_print_version(priv, version, NULL);
+		return -ENOTSUPP;
+	}
+}
+
+static int dw_spi_dwc_init(struct udevice *bus, struct dw_spi_priv *priv)
+{
+	priv->update_cr0 = dw_spi_dwc_update_cr0;
+	return 0;
 }
 
 static int request_gpio_cs(struct udevice *bus)
@@ -161,6 +265,10 @@ static int dw_spi_ofdata_to_platdata(struct udevice *bus)
 	/* Use 500KHz as a suitable default */
 	plat->frequency = dev_read_u32_default(bus, "spi-max-frequency",
 					       500000);
+
+	if (dev_read_bool(bus, "spi-slave"))
+		return -EINVAL;
+
 	log_info("SPI@%p max-frequency=%d\n", plat->regs, plat->frequency);
 
 	return request_gpio_cs(bus);
@@ -260,8 +368,11 @@ static int dw_spi_reset(struct udevice *bus)
 	return 0;
 }
 
+typedef int (*dw_spi_init_t)(struct udevice *bus, struct dw_spi_priv *priv);
+
 static int dw_spi_probe(struct udevice *bus)
 {
+	dw_spi_init_t init = (dw_spi_init_t)dev_get_driver_data(bus);
 	struct dw_spi_platdata *plat = dev_get_platdata(bus);
 	struct dw_spi_priv *priv = dev_get_priv(bus);
 	int ret;
@@ -274,6 +385,12 @@ static int dw_spi_probe(struct udevice *bus)
 		return ret;
 
 	ret = dw_spi_reset(bus);
+	if (ret)
+		return ret;
+
+	if (!init)
+		return -EINVAL;
+	ret = init(bus, priv);
 	if (ret)
 		return ret;
 
@@ -407,23 +524,18 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	if (flags & SPI_XFER_BEGIN)
 		external_cs_manage(dev, false);
 
-	cr0 = (priv->bits_per_word - 1) | (priv->type << SPI_FRF_OFFSET) |
-		(priv->mode << SPI_MODE_OFFSET) |
-		(priv->tmode << SPI_TMOD_OFFSET);
-
 	if (rx && tx)
-		priv->tmode = SPI_TMOD_TR;
+		priv->tmode = CTRLR0_TMOD_TR;
 	else if (rx)
-		priv->tmode = SPI_TMOD_RO;
+		priv->tmode = CTRLR0_TMOD_RO;
 	else
 		/*
-		 * In transmit only mode (SPI_TMOD_TO) input FIFO never gets
+		 * In transmit only mode (CTRL0_TMOD_TO) input FIFO never gets
 		 * any data which breaks our logic in poll_transfer() above.
 		 */
-		priv->tmode = SPI_TMOD_TR;
+		priv->tmode = CTRLR0_TMOD_TR;
 
-	cr0 &= ~SPI_TMOD_MASK;
-	cr0 |= (priv->tmode << SPI_TMOD_OFFSET);
+	cr0 = priv->update_cr0(priv);
 
 	priv->len = bitlen >> 3;
 	log_debug("rx=%p tx=%p len=%d [bytes]\n", rx, tx, priv->len);
@@ -477,7 +589,7 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 
 static int dw_spi_set_speed(struct udevice *bus, uint speed)
 {
-	struct dw_spi_platdata *plat = bus->platdata;
+	struct dw_spi_platdata *plat = dev_get_platdata(bus);
 	struct dw_spi_priv *priv = dev_get_priv(bus);
 	u16 clk_div;
 
@@ -549,7 +661,43 @@ static const struct dm_spi_ops dw_spi_ops = {
 };
 
 static const struct udevice_id dw_spi_ids[] = {
-	{ .compatible = "snps,dw-apb-ssi" },
+	/* Generic compatible strings */
+
+	{ .compatible = "snps,dw-apb-ssi", .data = (ulong)dw_spi_dw_generic_init },
+	{ .compatible = "snps,dw-apb-ssi-3.20a", .data = (ulong)dw_spi_dw16_init },
+	{ .compatible = "snps,dw-apb-ssi-3.22a", .data = (ulong)dw_spi_dw16_init },
+	/*
+	 * The exact version of the Intel Quark D20000 SPI device is documented
+	 * as 3.23*, so a "patch" version is not included.
+	 */
+	{ .compatible = "snps,dw-apb-ssi-3.23", .data = (ulong)dw_spi_dw32_init },
+	{ .compatible = "snps,dw-apb-ssi-4.00a", .data = (ulong)dw_spi_dw32_init },
+	/*
+	 * Similarly, the version of spi0-2 on the Canaan Kendryte K210 is
+	 * undocumented, and was determined empherically to be 4.01*.
+	 */
+	{ .compatible = "snps,dw-apb-ssi-4.01", .data = (ulong)dw_spi_dw32_init },
+	{ .compatible = "snps,dwc-ssi-1.01a", .data = (ulong)dw_spi_dwc_init },
+
+	/* Compatible strings for specific SoCs */
+
+	/*
+	 * Both the Cyclone V and Arria V share a device tree and have the same
+	 * version of this device. This compatible string is used for those
+	 * devices, and is not used for sofpgas in general.
+	 */
+	{ .compatible = "altr,socfpga-spi", .data = (ulong)dw_spi_dw16_init },
+	{ .compatible = "altr,socfpga-arria10-spi", .data = (ulong)dw_spi_dw16_init },
+	{ .compatible = "canaan,kendryte-k210-spi", .data = (ulong)dw_spi_dw32_init },
+	{ .compatible = "canaan,kendryte-k210-ssi", .data = (ulong)dw_spi_dwc_init },
+	/* FIXME: next two should be dw_spi_dw32_init; but they need testing */
+	{ .compatible = "intel,stratix10-spi", .data = (ulong)dw_spi_dw16_init },
+	{ .compatible = "intel,agilex-spi", .data = (ulong)dw_spi_dw16_init },
+	/* FIXME: is this the correct version for the next four? */
+	{ .compatible = "mscc,ocelot-spi", .data = (ulong)dw_spi_dw16_init },
+	{ .compatible = "mscc,jaguar2-spi", .data = (ulong)dw_spi_dw16_init },
+	{ .compatible = "snps,axs10x-spi", .data = (ulong)dw_spi_dw16_init },
+	{ .compatible = "snps,hsdk-spi", .data = (ulong)dw_spi_dw16_init },
 	{ }
 };
 

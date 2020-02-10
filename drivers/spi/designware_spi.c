@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <malloc.h>
 #include <spi.h>
+#include <spi-mem.h>
 #include <fdtdec.h>
 #include <reset.h>
 #include <dm/device_compat.h>
@@ -587,6 +588,108 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	return ret;
 }
 
+/*
+ * This function is necessary for reading SPI flash with the native CS
+ * c.f. https://lkml.org/lkml/2015/12/23/132
+ */
+static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
+{
+	bool read = op->data.dir == SPI_MEM_DATA_IN;
+	int pos, i, ret = 0;
+	struct udevice *bus = slave->dev->parent;
+	struct dw_spi_priv *priv = dev_get_priv(bus);
+	u8 op_len = sizeof(op->cmd.opcode) + op->addr.nbytes + op->dummy.nbytes;
+	u8 op_buf[op_len];
+	u32 cr0;
+
+	if (read)
+		priv->tmode = CTRLR0_TMOD_EPROMREAD;
+	else
+		priv->tmode = CTRLR0_TMOD_TO;
+
+	log_debug("buf=%p len=%u [bytes]\n", op->data.buf.in, op->data.nbytes);
+
+	cr0 = priv->update_cr0(priv);
+	log_debug("cr0=%08x\n", cr0);
+
+	spi_enable_chip(priv, 0);
+	dw_write(priv, DW_SPI_CTRL0, cr0);
+	if (read)
+		dw_write(priv, DW_SPI_CTRL1, op->data.nbytes - 1);
+	spi_enable_chip(priv, 1);
+
+	/* From spi_mem_exec_op */
+	pos = 0;
+	op_buf[pos++] = op->cmd.opcode;
+	if (op->addr.nbytes) {
+		for (i = 0; i < op->addr.nbytes; i++)
+			op_buf[pos + i] = op->addr.val >>
+				(8 * (op->addr.nbytes - i - 1));
+
+		pos += op->addr.nbytes;
+	}
+	if (op->dummy.nbytes)
+		memset(op_buf + pos, 0xff, op->dummy.nbytes);
+
+	external_cs_manage(slave->dev, false);
+
+	priv->tx = &op_buf;
+	priv->tx_end = priv->tx + op_len;
+	priv->rx = NULL;
+	priv->rx_end = NULL;
+	while (priv->tx != priv->tx_end)
+		dw_writer(priv);
+
+	/*
+	 * XXX: The following are tight loops! Enabling debug messages may cause
+	 * them to fail because we are not reading/writing the fifo fast enough.
+	 */
+	if (read) {
+		priv->rx = op->data.buf.in;
+		priv->rx_end = priv->rx + op->data.nbytes;
+
+		dw_write(priv, DW_SPI_SER, 1 << spi_chip_select(slave->dev));
+		while (priv->rx != priv->rx_end)
+			dw_reader(priv);
+	} else {
+		u32 val;
+
+		priv->tx = op->data.buf.out;
+		priv->tx_end = priv->tx + op->data.nbytes;
+
+		/* Fill up the write fifo before starting the transfer */
+		dw_writer(priv);
+		dw_write(priv, DW_SPI_SER, 1 << spi_chip_select(slave->dev));
+		while (priv->tx != priv->tx_end)
+			dw_writer(priv);
+
+		if (readl_poll_timeout(priv->regs + DW_SPI_SR, val,
+				       (val & SR_TF_EMPT) && !(val & SR_BUSY),
+				       RX_TIMEOUT * 1000)) {
+			ret = -ETIMEDOUT;
+		}
+	}
+
+	dw_write(priv, DW_SPI_SER, 0);
+	external_cs_manage(slave->dev, true);
+
+	log_debug("%u bytes xfered\n", op->data.nbytes);
+	return ret;
+}
+
+/* The size of ctrl1 limits data transfers to 64K */
+static int dw_spi_adjust_op_size(struct spi_slave *slave, struct spi_mem_op *op)
+{
+	op->data.nbytes = min(op->data.nbytes, 0x10000U);
+
+	return 0;
+}
+
+static const struct spi_controller_mem_ops dw_spi_mem_ops = {
+	.exec_op = dw_spi_exec_op,
+	.adjust_op_size = dw_spi_adjust_op_size,
+};
+
 static int dw_spi_set_speed(struct udevice *bus, uint speed)
 {
 	struct dw_spi_platdata *plat = dev_get_platdata(bus);
@@ -652,6 +755,7 @@ static int dw_spi_remove(struct udevice *bus)
 
 static const struct dm_spi_ops dw_spi_ops = {
 	.xfer		= dw_spi_xfer,
+	.mem_ops	= &dw_spi_mem_ops,
 	.set_speed	= dw_spi_set_speed,
 	.set_mode	= dw_spi_set_mode,
 	/*

@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <malloc.h>
 #include <spi.h>
+#include <spi-mem.h>
 #include <fdtdec.h>
 #include <reset.h>
 #include <dm/device_compat.h>
@@ -108,8 +109,8 @@ struct dw_spi_priv {
 	int len;
 
 	u32 fifo_len;		/* depth of the FIFO buffer */
-	void *tx;
-	void *tx_end;
+	const void *tx;
+	const void *tx_end;
 	void *rx;
 	void *rx_end;
 
@@ -471,6 +472,124 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	return ret;
 }
 
+/*
+ * This function is necessary for reading SPI flash with the native CS
+ * c.f. https://lkml.org/lkml/2015/12/23/132
+ */
+static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
+{
+	bool read = op->data.dir == SPI_MEM_DATA_IN;
+	int pos, i, ret = 0;
+	struct udevice *bus = slave->dev->parent;
+	struct dw_spi_platdata *plat = dev_get_platdata(bus);
+	struct dw_spi_priv *priv = dev_get_priv(bus);
+	u8 op_len = sizeof(op->cmd.opcode) + op->addr.nbytes + op->dummy.nbytes;
+	u8 op_buf[op_len];
+	u32 cr0;
+
+	if (read)
+		priv->tmode = SPI_TMOD_EPROMREAD;
+	else
+		priv->tmode = SPI_TMOD_TO;
+
+	debug("%s: buf=%p len=%u [bytes]\n",
+	      __func__, op->data.buf.in, op->data.nbytes);
+
+	cr0 = GEN_CTRL0(priv, plat);
+	debug("%s: cr0=%08x\n", __func__, cr0);
+
+	spi_enable_chip(priv, 0);
+	dw_write(priv, DW_SPI_CTRL0, cr0);
+	if (read)
+		dw_write(priv, DW_SPI_CTRL1, op->data.nbytes - 1);
+	spi_enable_chip(priv, 1);
+
+	/* From spi_mem_exec_op */
+	pos = 0;
+	op_buf[pos++] = op->cmd.opcode;
+	if (op->addr.nbytes) {
+		for (i = 0; i < op->addr.nbytes; i++)
+			op_buf[pos + i] = op->addr.val >>
+				(8 * (op->addr.nbytes - i - 1));
+
+		pos += op->addr.nbytes;
+	}
+	if (op->dummy.nbytes)
+		memset(op_buf + pos, 0xff, op->dummy.nbytes);
+
+	priv->tx = &op_buf;
+	priv->tx_end = priv->tx + op_len;
+	priv->rx = NULL;
+	priv->rx_end = NULL;
+	while (priv->tx != priv->tx_end) {
+		dw_writer(priv);
+		/* This loop needs a delay otherwise we can hang */
+		udelay(1);
+	}
+
+	/*
+	 * XXX: The following are tight loops! Enabling debug messages may cause
+	 * them to fail because we are not reading/writing the fifo fast enough.
+	 *
+	 * We heuristically break out of the loop when we stop getting data.
+	 * This is to stop us from hanging if the device doesn't send any data
+	 * (either at all, or after sending a response). For example, one flash
+	 * chip I tested did not send anything back after the first 64K of data.
+	 */
+	if (read) {
+		/* If we have gotten any data back yet */
+		bool got_data = false;
+		/* How many times we have looped without reading anything */
+		int loops_since_read = 0;
+		struct spi_mem_op *mut_op = (struct spi_mem_op *)op;
+
+		priv->rx = op->data.buf.in;
+		priv->rx_end = priv->rx + op->data.nbytes;
+
+		dw_write(priv, DW_SPI_SER, 1 << spi_chip_select(slave->dev));
+		while (priv->rx != priv->rx_end) {
+			void *last_rx = priv->rx;
+
+			dw_reader(priv);
+			if (priv->rx == last_rx) {
+				loops_since_read++;
+				/* Thresholds are arbitrary */
+				if (loops_since_read > 256)
+					break;
+				else if (got_data && loops_since_read > 32)
+					break;
+			} else {
+				got_data = true;
+				loops_since_read = 0;
+			}
+		}
+
+		/* Update with the actual amount of data read */
+		mut_op->data.nbytes -= priv->rx_end - priv->rx;
+	} else {
+		u32 val;
+
+		priv->tx = op->data.buf.out;
+		priv->tx_end = priv->tx + op->data.nbytes;
+
+		/* Fill up the write fifo before starting the transfer */
+		dw_writer(priv);
+		dw_write(priv, DW_SPI_SER, 1 << spi_chip_select(slave->dev));
+		while (priv->tx != priv->tx_end)
+			dw_writer(priv);
+
+		if (readl_poll_timeout(priv->regs + DW_SPI_SR, val,
+				       (val & SR_TF_EMPT) && !(val & SR_BUSY),
+				       RX_TIMEOUT * 1000)) {
+			ret = -ETIMEDOUT;
+		}
+	}
+
+	dw_write(priv, DW_SPI_SER, 0);
+	debug("%s: %u bytes xfered\n", __func__, op->data.nbytes);
+	return ret;
+}
+
 static int dw_spi_set_speed(struct udevice *bus, uint speed)
 {
 	struct dw_spi_platdata *plat = dev_get_platdata(bus);
@@ -534,8 +653,13 @@ static int dw_spi_remove(struct udevice *bus)
 	return 0;
 }
 
+static const struct spi_controller_mem_ops dw_spi_mem_ops = {
+	.exec_op = dw_spi_exec_op,
+};
+
 static const struct dm_spi_ops dw_spi_ops = {
 	.xfer		= dw_spi_xfer,
+	.mem_ops	= &dw_spi_mem_ops,
 	.set_speed	= dw_spi_set_speed,
 	.set_mode	= dw_spi_set_mode,
 	/*

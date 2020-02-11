@@ -162,7 +162,6 @@ class KernelDocDirective(Directive):
             finally:
                 self.state.memo.title_styles, self.state.memo.section_level, self.state.memo.reporter = save
 
-
 def setup(app):
     app.add_config_value('kerneldoc_bin', None, 'env')
     app.add_config_value('kerneldoc_srctree', None, 'env')

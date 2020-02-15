@@ -1,0 +1,116 @@
+Kendryte K210 FPIOA
+
+This binding describes the Fully-Programmable Input/Output Array found on
+Kendryte K210 SoCs. Any of the 256 functions can be mapped to any of the 48
+pins.
+
+Required properties:
+- compatible: should be "kendryte,k210-fpioa"
+- reg: address and length of the FPIOA registers
+- kendryte,sysctl: phandle to the "sysctl" register map node
+- kendryte,power-offset: offset in the register map of the power bank control
+  register (in bytes)
+
+Configuration nodes
+
+Pin configuration nodes are documented in pinctrl-bindings.txt
+
+Valid values for pins, groups, and function names:
+
+pins:
+	"IO_X", where X is a number from 0 to 47.
+
+groups:
+	A0, A1, A2, B0, B1, B2, C0, C1
+
+functions:
+	JTAG_TCLK, JTAG_TDI, JTAG_TMS, JTAG_TDO, SPI0_D0, SPI0_D1, SPI0_D2,
+	SPI0_D3, SPI0_D4, SPI0_D5, SPI0_D6, SPI0_D7, SPI0_SS0, SPI0_SS1,
+	SPI0_SS2, SPI0_SS3, SPI0_ARB, SPI0_SCLK, UARTHS_RX, UARTHS_TX, RESV6,
+	RESV7, CLK_SPI1, CLK_I2C1, GPIOHS0, GPIOHS1, GPIOHS2, GPIOHS3, GPIOHS4,
+	GPIOHS5, GPIOHS6, GPIOHS7, GPIOHS8, GPIOHS9, GPIOHS10, GPIOHS11,
+	GPIOHS12, GPIOHS13, GPIOHS14, GPIOHS15, GPIOHS16, GPIOHS17, GPIOHS18,
+	GPIOHS19, GPIOHS20, GPIOHS21, GPIOHS22, GPIOHS23, GPIOHS24, GPIOHS25,
+	GPIOHS26, GPIOHS27, GPIOHS28, GPIOHS29, GPIOHS30, GPIOHS31, GPIO0,
+	GPIO1, GPIO2, GPIO3, GPIO4, GPIO5, GPIO6, GPIO7, UART1_RX, UART1_TX,
+	UART2_RX, UART2_TX, UART3_RX, UART3_TX, SPI1_D0, SPI1_D1, SPI1_D2,
+	SPI1_D3, SPI1_D4, SPI1_D5, SPI1_D6, SPI1_D7, SPI1_SS0, SPI1_SS1,
+	SPI1_SS2, SPI1_SS3, SPI1_ARB, SPI1_SCLK, SPI2_D0, SPI2_SS, SPI2_SCLK,
+	I2S0_MCLK, I2S0_SCLK, I2S0_WS, I2S0_IN_D0, I2S0_IN_D1, I2S0_IN_D2,
+	I2S0_IN_D3, I2S0_OUT_D0, I2S0_OUT_D1, I2S0_OUT_D2, I2S0_OUT_D3,
+	I2S1_MCLK, I2S1_SCLK, I2S1_WS, I2S1_IN_D0, I2S1_IN_D1, I2S1_IN_D2,
+	I2S1_IN_D3, I2S1_OUT_D0, I2S1_OUT_D1, I2S1_OUT_D2, I2S1_OUT_D3,
+	I2S2_MCLK, I2S2_SCLK, I2S2_WS, I2S2_IN_D0, I2S2_IN_D1, I2S2_IN_D2,
+	I2S2_IN_D3, I2S2_OUT_D0, I2S2_OUT_D1, I2S2_OUT_D2, I2S2_OUT_D3, RESV0,
+	RESV1, RESV2, RESV3, RESV4, RESV5, I2C0_SCLK, I2C0_SDA, I2C1_SCLK,
+	I2C1_SDA, I2C2_SCLK, I2C2_SDA, DVP_XCLK, DVP_RST, DVP_PWDN, DVP_VSYNC,
+	DVP_HREF, DVP_PCLK, DVP_D0, DVP_D1, DVP_D2, DVP_D3, DVP_D4, DVP_D5,
+	DVP_D6, DVP_D7, SCCB_SCLK, SCCB_SDA, UART1_CTS, UART1_DSR, UART1_DCD,
+	UART1_RI, UART1_SIR_IN, UART1_DTR, UART1_RTS, UART1_OUT2, UART1_OUT1,
+	UART1_SIR_OUT, UART1_BAUD, UART1_RE, UART1_DE, UART1_RS485_EN,
+	UART2_CTS, UART2_DSR, UART2_DCD, UART2_RI, UART2_SIR_IN, UART2_DTR,
+	UART2_RTS, UART2_OUT2, UART2_OUT1, UART2_SIR_OUT, UART2_BAUD, UART2_RE,
+	UART2_DE, UART2_RS485_EN, UART3_CTS, UART3_DSR, UART3_DCD, UART3_RI,
+	UART3_SIR_IN, UART3_DTR, UART3_RTS, UART3_OUT2, UART3_OUT1,
+	UART3_SIR_OUT, UART3_BAUD, UART3_RE, UART3_DE, UART3_RS485_EN,
+	TIMER0_TOGGLE1, TIMER0_TOGGLE2, TIMER0_TOGGLE3, TIMER0_TOGGLE4,
+	TIMER1_TOGGLE1, TIMER1_TOGGLE2, TIMER1_TOGGLE3, TIMER1_TOGGLE4,
+	TIMER2_TOGGLE1, TIMER2_TOGGLE2, TIMER2_TOGGLE3, TIMER2_TOGGLE4,
+	CLK_SPI2, CLK_I2C2, INTERNAL0, INTERNAL1, INTERNAL2, INTERNAL3,
+	INTERNAL4, INTERNAL5, INTERNAL6, INTERNAL7, INTERNAL8, INTERNAL9,
+	INTERNAL10, INTERNAL11, INTERNAL12, INTERNAL13, INTERNAL14, INTERNAL15,
+	INTERNAL16, INTERNAL17, CONSTANT, INTERNAL18, DEBUG0, DEBUG1, DEBUG2,
+	DEBUG3, DEBUG4, DEBUG5, DEBUG6, DEBUG7, DEBUG8, DEBUG9, DEBUG10,
+	DEBUG11, DEBUG12, DEBUG13, DEBUG14, DEBUG15, DEBUG16, DEBUG17, DEBUG18,
+	DEBUG19, DEBUG20, DEBUG21, DEBUG22, DEBUG23, DEBUG24, DEBUG25, DEBUG26,
+	DEBUG27, DEBUG28, DEBUG29, DEBUG30, DEBUG31
+
+Valid properties include:
+	bias-disable, bias-pull-down, bias-pull-up, drive-strength,
+	drive-strength-ua, input-enable, input-disable, input-schmitt-enable,
+	input-schmitt-disable, power-source, output-low, output-high,
+	output-enable, output-disable, slew-rate
+
+Notes on specific properties include:
+- bias-pull-up, -down, and -pin-default: The pull strength cannot be configured.
+- drive-strength: There are 8 drive strength settings between 11 and 50 mA
+- power-source: Controls the output voltage of a bank of pins. Either
+  K210_PC_POWER_1V8 or K210_PC_POWER_3V3 may be specified. This property cannot
+  be specified for individual pins.
+- slew-rate: Specifying this property reduces the slew rate
+
+Example:
+fpioa: pinmux@502B0000 {
+	compatible = "kendryte,k210-fpioa";
+	reg = <0x502B0000 0x100>;
+	kendryte,sysctl = <&sysctl>;
+	kendryte,power-offset = <K210_SYSCTL_POWER_SEL>;
+
+	fpioa_jtag: jtag {
+		voltage {
+			group = "A0";
+			power-source = <K210_PC_POWER_3V3>;
+		};
+		tck {
+			function = "JTAG_TCLK";
+			pins = "IO_0";
+		};
+		tdi {
+			function = "JTAG_TDI";
+			pins = "IO_1";
+		};
+		tms {
+			function = "JTAG_TMS";
+			pins = "IO_2";
+		};
+		tdo {
+			function = "JTAG_TDO";
+			pins = "IO_3";
+		};
+	};
+
+	fpioa_isp: isp {
+		function = "GPIOHS0";
+		pins = "IO_16";
+	};
+};

@@ -12,38 +12,6 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-/**
- * riscv_send_ipi() - Send inter-processor interrupt (IPI)
- *
- * Platform code must provide this function.
- *
- * @hart: Hart ID of receiving hart
- * @return 0 if OK, -ve on error
- */
-extern int riscv_send_ipi(int hart);
-
-/**
- * riscv_clear_ipi() - Clear inter-processor interrupt (IPI)
- *
- * Platform code must provide this function.
- *
- * @hart: Hart ID of hart to be cleared
- * @return 0 if OK, -ve on error
- */
-extern int riscv_clear_ipi(int hart);
-
-/**
- * riscv_get_ipi() - Get status of inter-processor interrupt (IPI)
- *
- * Platform code must provide this function.
- *
- * @hart: Hart ID of hart to be checked
- * @pending: Pointer to variable with result of the check,
- *           1 if IPI is pending, 0 otherwise
- * @return 0 if OK, -ve on error
- */
-extern int riscv_get_ipi(int hart, int *pending);
-
 static int send_ipi_many(struct ipi_data *ipi, int wait)
 {
 	ofnode node, cpus;
@@ -110,13 +78,8 @@ void handle_ipi(ulong hart)
 	int ret;
 	void (*smp_function)(ulong hart, ulong arg0, ulong arg1);
 
-	if (hart >= CONFIG_NR_CPUS)
+	if (hart >= CONFIG_NR_CPUS || !READ_ONCE(gd->arch.ipi_ready))
 		return;
-
-	__smp_mb();
-
-	smp_function = (void (*)(ulong, ulong, ulong))gd->arch.ipi[hart].addr;
-	invalidate_icache_all();
 
 	/*
 	 * Clear the IPI to acknowledge the request before jumping to the
@@ -124,23 +87,32 @@ void handle_ipi(ulong hart)
 	 */
 	ret = riscv_clear_ipi(hart);
 	if (ret) {
-		pr_err("Cannot clear IPI of hart %ld\n", hart);
+		pr_err("Cannot clear IPI of hart %ld (error %d)\n", hart, ret);
 		return;
 	}
+
+	__smp_mb();
+
+	smp_function = (void (*)(ulong, ulong, ulong))gd->arch.ipi[hart].addr;
+	/*
+	 * There may be an IPI raised before u-boot begins execution, so check
+	 * to ensure we actually have a function to call.
+	 */
+	if (!smp_function)
+		return;
+	log_debug("hart = %lu func = %p\n", hart, smp_function);
+	invalidate_icache_all();
 
 	smp_function(hart, gd->arch.ipi[hart].arg0, gd->arch.ipi[hart].arg1);
 }
 
 int smp_call_function(ulong addr, ulong arg0, ulong arg1, int wait)
 {
-	int ret = 0;
-	struct ipi_data ipi;
+	struct ipi_data ipi = {
+		.addr = addr,
+		.arg0 = arg0,
+		.arg1 = arg1,
+	};
 
-	ipi.addr = addr;
-	ipi.arg0 = arg0;
-	ipi.arg1 = arg1;
-
-	ret = send_ipi_many(&ipi, wait);
-
-	return ret;
+	return send_ipi_many(&ipi, wait);
 }

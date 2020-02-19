@@ -7,6 +7,11 @@
 #include <common.h>
 #include <asm/sbi.h>
 
+int riscv_init_ipi(void)
+{
+	return 0;
+}
+
 int riscv_send_ipi(int hart)
 {
 	ulong mask;

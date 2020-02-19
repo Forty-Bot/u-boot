@@ -28,6 +28,7 @@ struct arch_global_data {
 #endif
 #ifdef CONFIG_SMP
 	struct ipi_data ipi[CONFIG_NR_CPUS];
+	long ipi_ready; /* Set after riscv_init_ipi is called */
 #endif
 #ifndef CONFIG_XIP
 	ulong available_harts;

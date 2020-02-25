@@ -178,21 +178,36 @@ const struct clk_ops clk_divider_ops = {
 	.set_rate = clk_divider_set_rate,
 };
 
-static struct clk *_register_divider(struct device *dev, const char *name,
-		const char *parent_name, unsigned long flags,
-		void __iomem *reg, u8 shift, u8 width,
-		u8 clk_divider_flags, const struct clk_div_table *table)
+struct clk *clk_register_divider_struct(const char *name,
+					const char *parent_name,
+					struct clk_divider *div)
 {
-	struct clk_divider *div;
-	struct clk *clk;
 	int ret;
+	struct clk *clk;
 
-	if (clk_divider_flags & CLK_DIVIDER_HIWORD_MASK) {
-		if (width + shift > 16) {
+	if (div->flags & CLK_DIVIDER_HIWORD_MASK) {
+		if (div->width + div->shift > 16) {
 			pr_warn("divider value exceeds LOWORD field\n");
 			return ERR_PTR(-EINVAL);
 		}
 	}
+
+	/* register the clock */
+	clk = &div->clk;
+
+	ret = clk_register(clk, UBOOT_DM_CLK_CCF_DIVIDER, name, parent_name);
+	if (ret)
+		return ERR_PTR(ret);
+	return clk;
+}
+
+struct clk *clk_register_divider(struct device *dev, const char *name,
+				 const char *parent_name, unsigned long flags,
+				 void __iomem *reg, u8 shift, u8 width,
+				 u8 clk_divider_flags)
+{
+	struct clk_divider *div;
+	struct clk *clk;
 
 	/* allocate the divider */
 	div = kzalloc(sizeof(*div), GFP_KERNEL);
@@ -204,34 +219,13 @@ static struct clk *_register_divider(struct device *dev, const char *name,
 	div->shift = shift;
 	div->width = width;
 	div->flags = clk_divider_flags;
-	div->table = table;
 #if CONFIG_IS_ENABLED(SANDBOX_CLK_CCF)
 	div->io_divider_val = *(u32 *)reg;
 #endif
 
-	/* register the clock */
-	clk = &div->clk;
-
-	ret = clk_register(clk, UBOOT_DM_CLK_CCF_DIVIDER, name, parent_name);
-	if (ret) {
-		kfree(div);
-		return ERR_PTR(ret);
-	}
-
-	return clk;
-}
-
-struct clk *clk_register_divider(struct device *dev, const char *name,
-		const char *parent_name, unsigned long flags,
-		void __iomem *reg, u8 shift, u8 width,
-		u8 clk_divider_flags)
-{
-	struct clk *clk;
-
-	clk =  _register_divider(dev, name, parent_name, flags, reg, shift,
-				 width, clk_divider_flags, NULL);
+	clk = clk_register_divider_struct(name, parent_name, div);
 	if (IS_ERR(clk))
-		return ERR_CAST(clk);
+		kfree(div);
 	return clk;
 }
 

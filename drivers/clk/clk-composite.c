@@ -95,6 +95,51 @@ static int clk_composite_disable(struct clk *clk)
 		return 0;
 }
 
+struct clk *clk_register_composite_struct(const char *name,
+					  const char * const *parent_names,
+					  int num_parents,
+					  struct clk_composite *composite)
+{
+	int ret;
+	struct clk *clk;
+
+	if (!num_parents || (num_parents != 1 && !composite->mux))
+		return ERR_PTR(-EINVAL);
+
+	if (composite->mux && composite->mux_ops)
+		composite->mux->data = (ulong)composite;
+
+	if (composite->rate && composite->rate_ops) {
+		if (!composite->rate_ops->get_rate)
+			return ERR_PTR(-EINVAL);
+
+		composite->rate->data = (ulong)composite;
+	}
+
+	if (composite->gate && composite->gate_ops) {
+		if (!composite->gate_ops->enable ||
+		    !composite->gate_ops->disable)
+			return ERR_PTR(-EINVAL);
+
+		composite->gate->data = (ulong)composite;
+	}
+
+	clk = &composite->clk;
+	ret = clk_register(clk, UBOOT_DM_CLK_COMPOSITE, name,
+			   parent_names[clk_composite_get_parent(clk)]);
+	if (ret)
+		clk = ERR_PTR(ret);
+
+	if (composite->mux)
+		composite->mux->dev = clk->dev;
+	if (composite->rate)
+		composite->rate->dev = clk->dev;
+	if (composite->gate)
+		composite->gate->dev = clk->dev;
+
+	return clk;
+}
+
 struct clk *clk_register_composite(struct device *dev, const char *name,
 				   const char * const *parent_names,
 				   int num_parents, struct clk *mux,
@@ -107,62 +152,24 @@ struct clk *clk_register_composite(struct device *dev, const char *name,
 {
 	struct clk *clk;
 	struct clk_composite *composite;
-	int ret;
-
-	if (!num_parents || (num_parents != 1 && !mux))
-		return ERR_PTR(-EINVAL);
 
 	composite = kzalloc(sizeof(*composite), GFP_KERNEL);
 	if (!composite)
 		return ERR_PTR(-ENOMEM);
 
-	if (mux && mux_ops) {
-		composite->mux = mux;
-		composite->mux_ops = mux_ops;
-		mux->data = (ulong)composite;
-	}
+	composite->mux = mux;
+	composite->mux_ops = mux_ops;
 
-	if (rate && rate_ops) {
-		if (!rate_ops->get_rate) {
-			clk = ERR_PTR(-EINVAL);
-			goto err;
-		}
+	composite->rate = rate;
+	composite->rate_ops = rate_ops;
 
-		composite->rate = rate;
-		composite->rate_ops = rate_ops;
-		rate->data = (ulong)composite;
-	}
+	composite->gate = gate;
+	composite->gate_ops = gate_ops;
 
-	if (gate && gate_ops) {
-		if (!gate_ops->enable || !gate_ops->disable) {
-			clk = ERR_PTR(-EINVAL);
-			goto err;
-		}
-
-		composite->gate = gate;
-		composite->gate_ops = gate_ops;
-		gate->data = (ulong)composite;
-	}
-
-	clk = &composite->clk;
-	ret = clk_register(clk, UBOOT_DM_CLK_COMPOSITE, name,
-			   parent_names[clk_composite_get_parent(clk)]);
-	if (ret) {
-		clk = ERR_PTR(ret);
-		goto err;
-	}
-
-	if (composite->mux)
-		composite->mux->dev = clk->dev;
-	if (composite->rate)
-		composite->rate->dev = clk->dev;
-	if (composite->gate)
-		composite->gate->dev = clk->dev;
-
-	return clk;
-
-err:
-	kfree(composite);
+	clk = clk_register_composite_struct(name, parent_names, num_parents,
+					    composite);
+	if (IS_ERR(clk))
+		kfree(composite);
 	return clk;
 }
 

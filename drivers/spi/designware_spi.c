@@ -161,7 +161,9 @@ static int dw_spi_ofdata_to_platdata(struct udevice *bus)
 {
 	struct dw_spi_platdata *plat = bus->platdata;
 
-	plat->regs = (struct dw_spi *)devfdt_get_addr(bus);
+	plat->regs = dev_read_addr_ptr(bus);
+	if (!plat->regs)
+		return -EINVAL;
 
 	/* Use 500KHz as a suitable default */
 	plat->frequency = dev_read_u32_default(bus, "spi-max-frequency",

@@ -427,7 +427,8 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	priv->tx = (void *)tx;
 	priv->tx_end = priv->tx + priv->len;
 	priv->rx = rx;
-	priv->rx_end = priv->rx + priv->len;
+	/* If we aren't recieving, rx_end needs to be valid for tx_max() */
+	priv->rx_end = priv->rx + (rx ? priv->len : 0);
 
 	/* Disable controller before writing control registers */
 	spi_enable_chip(priv, 0);

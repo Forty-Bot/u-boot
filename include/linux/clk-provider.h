@@ -95,6 +95,8 @@ struct clk *clk_register_gate(struct device *dev, const char *name,
 			      const char *parent_name, unsigned long flags,
 			      void __iomem *reg, u8 bit_idx,
 			      u8 clk_gate_flags, spinlock_t *lock);
+struct clk *clk_register_gate_struct(const char *name, const char *parent_name,
+				     struct clk_gate *gate);
 
 struct clk_div_table {
 	unsigned int	val;
@@ -166,6 +168,10 @@ struct clk *clk_register_composite(struct device *dev, const char *name,
 		struct clk *rate_clk, const struct clk_ops *rate_ops,
 		struct clk *gate_clk, const struct clk_ops *gate_ops,
 		unsigned long flags);
+struct clk *clk_register_composite_struct(const char *name,
+					  const char * const *parent_names,
+					  int num_parents,
+					  struct clk_composite *composite);
 
 int clk_register(struct clk *clk, const char *drv_name, const char *name,
 		 const char *parent_name);
@@ -178,6 +184,9 @@ struct clk *clk_register_divider(struct device *dev, const char *name,
 		const char *parent_name, unsigned long flags,
 		void __iomem *reg, u8 shift, u8 width,
 		u8 clk_divider_flags);
+struct clk *clk_register_divider_struct(const char *name,
+					const char *parent_name,
+					struct clk_divider *div);
 
 struct clk *clk_register_mux(struct device *dev, const char *name,
 		const char * const *parent_names, u8 num_parents,

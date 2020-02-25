@@ -111,6 +111,27 @@ const struct clk_ops clk_gate_ops = {
 	.get_rate = clk_generic_get_rate,
 };
 
+struct clk *clk_register_gate_struct(const char *name, const char *parent_name,
+				     struct clk_gate *gate)
+{
+	int ret;
+	struct clk *clk;
+
+	if (gate->flags & CLK_GATE_HIWORD_MASK) {
+		if (gate->bit_idx > 15) {
+			pr_err("gate bit exceeds LOWORD field\n");
+			return ERR_PTR(-EINVAL);
+		}
+	}
+
+	clk = &gate->clk;
+
+	ret = clk_register(clk, UBOOT_DM_CLK_GATE, name, parent_name);
+	if (ret)
+		return ERR_PTR(ret);
+	return clk;
+}
+
 struct clk *clk_register_gate(struct device *dev, const char *name,
 			      const char *parent_name, unsigned long flags,
 			      void __iomem *reg, u8 bit_idx,
@@ -118,14 +139,6 @@ struct clk *clk_register_gate(struct device *dev, const char *name,
 {
 	struct clk_gate *gate;
 	struct clk *clk;
-	int ret;
-
-	if (clk_gate_flags & CLK_GATE_HIWORD_MASK) {
-		if (bit_idx > 15) {
-			pr_err("gate bit exceeds LOWORD field\n");
-			return ERR_PTR(-EINVAL);
-		}
-	}
 
 	/* allocate the gate */
 	gate = kzalloc(sizeof(*gate), GFP_KERNEL);
@@ -140,14 +153,9 @@ struct clk *clk_register_gate(struct device *dev, const char *name,
 	gate->io_gate_val = *(u32 *)reg;
 #endif
 
-	clk = &gate->clk;
-
-	ret = clk_register(clk, UBOOT_DM_CLK_GATE, name, parent_name);
-	if (ret) {
+	clk = clk_register_gate_struct(name, parent_name, gate);
+	if (IS_ERR(clk))
 		kfree(gate);
-		return ERR_PTR(ret);
-	}
-
 	return clk;
 }
 

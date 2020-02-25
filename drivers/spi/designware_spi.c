@@ -304,7 +304,7 @@ static inline u32 tx_max(struct dw_spi_priv *priv)
 {
 	u32 tx_left, tx_room, rxtx_gap;
 
-	tx_left = (priv->tx_end - priv->tx) / (priv->bits_per_word >> 3);
+	tx_left = priv->tx_end - priv->tx;
 	tx_room = priv->fifo_len - dw_read(priv, DW_SPI_TXFLR);
 
 	/*
@@ -315,8 +315,7 @@ static inline u32 tx_max(struct dw_spi_priv *priv)
 	 * shift registers. So a control from sw point of
 	 * view is taken.
 	 */
-	rxtx_gap = ((priv->rx_end - priv->rx) - (priv->tx_end - priv->tx)) /
-		(priv->bits_per_word >> 3);
+	rxtx_gap = ((priv->rx_end - priv->rx) - (priv->tx_end - priv->tx));
 
 	return min3(tx_left, tx_room, (u32)(priv->fifo_len - rxtx_gap));
 }
@@ -324,7 +323,7 @@ static inline u32 tx_max(struct dw_spi_priv *priv)
 /* Return the max entries we should read out of rx fifo */
 static inline u32 rx_max(struct dw_spi_priv *priv)
 {
-	u32 rx_left = (priv->rx_end - priv->rx) / (priv->bits_per_word >> 3);
+	u32 rx_left = priv->rx_end - priv->rx;
 
 	return min_t(u32, rx_left, dw_read(priv, DW_SPI_RXFLR));
 }
@@ -336,15 +335,10 @@ static void dw_writer(struct dw_spi_priv *priv)
 
 	while (max--) {
 		/* Set the tx word if the transfer's original "tx" is not null */
-		if (priv->tx_end - priv->len) {
-			if (priv->bits_per_word == 8)
-				txw = *(u8 *)(priv->tx);
-			else
-				txw = *(u16 *)(priv->tx);
-		}
+		if (priv->tx_end - priv->len)
+			txw = *(u8 *)(priv->tx);
 		dw_write(priv, DW_SPI_DR, txw);
-		debug("%s: tx=0x%02x\n", __func__, txw);
-		priv->tx += priv->bits_per_word >> 3;
+		priv->tx++;
 	}
 }
 
@@ -355,16 +349,11 @@ static void dw_reader(struct dw_spi_priv *priv)
 
 	while (max--) {
 		rxw = dw_read(priv, DW_SPI_DR);
-		debug("%s: rx=0x%02x\n", __func__, rxw);
 
 		/* Care about rx if the transfer's original "rx" is not null */
-		if (priv->rx_end - priv->len) {
-			if (priv->bits_per_word == 8)
-				*(u8 *)(priv->rx) = rxw;
-			else
-				*(u16 *)(priv->rx) = rxw;
-		}
-		priv->rx += priv->bits_per_word >> 3;
+		if (priv->rx_end - priv->len)
+			*(u8 *)(priv->rx) = rxw;
+		priv->rx++;
 	}
 }
 

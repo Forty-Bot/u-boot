@@ -142,7 +142,8 @@ static int request_gpio_cs(struct udevice *bus)
 	int ret;
 
 	/* External chip select gpio line is optional */
-	ret = gpio_request_by_name(bus, "cs-gpio", 0, &priv->cs_gpio, 0);
+	ret = gpio_request_by_name(bus, "cs-gpios", 0, &priv->cs_gpio,
+				   GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
 	if (ret == -ENOENT)
 		return 0;
 
@@ -151,12 +152,7 @@ static int request_gpio_cs(struct udevice *bus)
 		return ret;
 	}
 
-	if (dm_gpio_is_valid(&priv->cs_gpio)) {
-		dm_gpio_set_dir_flags(&priv->cs_gpio,
-				      GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
-	}
-
-	debug("%s: used external gpio for CS management\n", __func__);
+	debug("%s: using external gpio for CS management\n", __func__);
 #endif
 	return 0;
 }

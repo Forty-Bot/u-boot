@@ -517,6 +517,8 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	if (op->dummy.nbytes)
 		memset(op_buf + pos, 0xff, op->dummy.nbytes);
 
+	external_cs_manage(dev, false);
+
 	priv->tx = &op_buf;
 	priv->tx_end = priv->tx + op_len;
 	priv->rx = NULL;
@@ -586,6 +588,8 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	}
 
 	dw_write(priv, DW_SPI_SER, 0);
+	external_cs_manage(dev, true);
+
 	debug("%s: %u bytes xfered\n", __func__, op->data.nbytes);
 	return ret;
 }

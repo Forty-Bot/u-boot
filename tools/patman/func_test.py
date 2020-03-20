@@ -149,7 +149,7 @@ class TestFunctional(unittest.TestCase):
         series = patchstream.GetMetaDataForTest(text)
         cover_fname, args = self.CreatePatchesForTest(series)
         with capture() as out:
-            patchstream.FixPatches(series, args)
+            patchstream.FixPatches(series, args, False)
             if cover_fname and series.get('cover'):
                 patchstream.InsertCoverLetter(cover_fname, series, count)
             series.DoChecks()

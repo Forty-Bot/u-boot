@@ -137,7 +137,7 @@ class Series(dict):
         if cmd:
             print('Git command: %s' % cmd)
 
-    def MakeChangeLog(self, commit):
+    def MakeChangeLog(self, commit, empty_changes):
         """Create a list of changes for each version.
 
         Return:
@@ -151,7 +151,8 @@ class Series(dict):
             - Fix the widget
             - Jog the dial
 
-            etc.
+            etc. If empty_changes is False, suppress output of versions without
+            any changes.
         """
         final = []
         process_it = self.get('process_log', '').split(',')
@@ -170,9 +171,10 @@ class Series(dict):
                 out = sorted(out)
             if have_changes:
                 out.insert(0, line)
-            else:
-                out = [line + ' None']
-            if need_blank:
+            elif empty_changes:
+                out.insert(0, ' None')
+            # Only add a new line if we output something
+            if need_blank and (empty_changes or have_changes):
                 out.insert(0, '')
             final += out
             need_blank = have_changes

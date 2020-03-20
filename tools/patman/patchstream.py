@@ -62,7 +62,7 @@ class PatchStream:
     unwanted tags or inject additional ones. These correspond to the two
     phases of processing.
     """
-    def __init__(self, series, name=None, is_log=False):
+    def __init__(self, series, empty_changes=True, name=None, is_log=False):
         self.skip_blank = False          # True to skip a single blank line
         self.found_test = False          # Found a TEST= line
         self.lines_after_test = 0        # MNumber of lines found after TEST=
@@ -78,6 +78,7 @@ class PatchStream:
         self.state = STATE_MSG_HEADER    # What state are we in?
         self.signoff = []                # Contents of signoff line
         self.commit = None               # Current commit
+        self.empty_changes = empty_changes    # Whether to output empty changes
 
     def AddToSeries(self, line, name, value):
         """Add a new Series-xxx tag.
@@ -340,9 +341,9 @@ class PatchStream:
             elif line == '---':
                 self.state = STATE_DIFFS
 
-                # Output the tags (signeoff first), then change list
+                # Output the tags (signoff first), then change list
                 out = []
-                log = self.series.MakeChangeLog(self.commit)
+                log = self.series.MakeChangeLog(self.commit, self.empty_changes)
                 out += [line]
                 if self.commit:
                     out += self.commit.notes
@@ -495,7 +496,7 @@ def GetMetaDataForTest(text):
     ps.Finalize()
     return series
 
-def FixPatch(backup_dir, fname, series, commit):
+def FixPatch(backup_dir, fname, series, commit, empty_changes):
     """Fix up a patch file, by adding/removing as required.
 
     We remove our tags from the patch file, insert changes lists, etc.
@@ -513,7 +514,7 @@ def FixPatch(backup_dir, fname, series, commit):
     handle, tmpname = tempfile.mkstemp()
     outfd = os.fdopen(handle, 'w', encoding='utf-8')
     infd = open(fname, 'r', encoding='utf-8')
-    ps = PatchStream(series)
+    ps = PatchStream(series, empty_changes=empty_changes)
     ps.commit = commit
     ps.ProcessStream(infd, outfd)
     infd.close()
@@ -525,7 +526,7 @@ def FixPatch(backup_dir, fname, series, commit):
     shutil.move(tmpname, fname)
     return ps.warn
 
-def FixPatches(series, fnames):
+def FixPatches(series, fnames, empty_changes):
     """Fix up a list of patches identified by filenames
 
     The patch files are processed in place, and overwritten.
@@ -541,7 +542,7 @@ def FixPatches(series, fnames):
         commit = series.commits[count]
         commit.patch = fname
         commit.count = count
-        result = FixPatch(backup_dir, fname, series, commit)
+        result = FixPatch(backup_dir, fname, series, commit, empty_changes)
         if result:
             print('%d warnings for %s:' % (len(result), fname))
             for warn in result:

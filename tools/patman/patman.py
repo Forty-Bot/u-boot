@@ -61,7 +61,10 @@ parser.add_option('--no-check', action='store_false', dest='check_patch',
                   default=True,
                   help="Don't check for patch compliance")
 parser.add_option('--no-tags', action='store_false', dest='process_tags',
-                  default=True, help="Don't process subject tags as aliaes")
+                  default=True, help="Don't process subject tags as aliases")
+parser.add_option('--no-empty-changes', action = 'store_false',
+                  dest='empty_changes', default=True,
+		  help="Suppress empty change entries in patch changelogs")
 parser.add_option('--smtp-server', type='str',
                   help="Specify the SMTP server to 'git send-email'")
 parser.add_option('-T', '--thread', action='store_true', dest='thread',
@@ -146,7 +149,7 @@ else:
                 series)
 
     # Fix up the patch files to our liking, and insert the cover letter
-    patchstream.FixPatches(series, args)
+    patchstream.FixPatches(series, args, options.empty_changes)
     if cover_fname and series.get('cover'):
         patchstream.InsertCoverLetter(cover_fname, series, options.count)
 

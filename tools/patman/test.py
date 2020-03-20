@@ -89,7 +89,7 @@ Signed-off-by: Simon Glass <sjg@chromium.org>
         com.change_id = 'I80fe1d0c0b7dd10aa58ce5bb1d9290b6664d5413'
         com.count = -1
 
-        patchstream.FixPatch(None, inname, series.Series(), com)
+        patchstream.FixPatch(None, inname, series.Series(), com, False)
 
         rc = os.system('diff -u %s %s' % (inname, expname))
         self.assertEqual(rc, 0)

@@ -62,6 +62,9 @@ parser.add_option('--no-check', action='store_false', dest='check_patch',
                   help="Don't check for patch compliance")
 parser.add_option('--no-tags', action='store_false', dest='process_tags',
                   default=True, help="Don't process subject tags as aliases")
+parser.add_option('--no-changelog', action = 'store_false', dest='changelog',
+                  default=True,
+		  help="Don't create a changelog in the cover letter")
 parser.add_option('--no-empty-changes', action = 'store_false',
                   dest='empty_changes', default=True,
 		  help="Suppress empty change entries in patch changelogs")
@@ -151,7 +154,8 @@ else:
     # Fix up the patch files to our liking, and insert the cover letter
     patchstream.FixPatches(series, args, options.empty_changes)
     if cover_fname and series.get('cover'):
-        patchstream.InsertCoverLetter(cover_fname, series, options.count)
+        patchstream.InsertCoverLetter(cover_fname, series, options.count,
+	        options.changelog)
 
     # Do a few checks on the series
     series.DoChecks()

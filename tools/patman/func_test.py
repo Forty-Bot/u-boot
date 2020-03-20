@@ -151,7 +151,7 @@ class TestFunctional(unittest.TestCase):
         with capture() as out:
             patchstream.FixPatches(series, args, False)
             if cover_fname and series.get('cover'):
-                patchstream.InsertCoverLetter(cover_fname, series, count)
+                patchstream.InsertCoverLetter(cover_fname, series, count, True)
             series.DoChecks()
             cc_file = series.MakeCcFile(process_tags, cover_fname,
                                         not ignore_bad_tags, add_maintainers,

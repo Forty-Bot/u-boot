@@ -551,7 +551,7 @@ def FixPatches(series, fnames, empty_changes):
         count += 1
     print('Cleaned %d patches' % count)
 
-def InsertCoverLetter(fname, series, count):
+def InsertCoverLetter(fname, series, count, changelog):
     """Inserts a cover letter with the required info into patch 0
 
     Args:
@@ -581,7 +581,8 @@ def InsertCoverLetter(fname, series, count):
                 line += '\n'.join(series.notes) + '\n'
 
             # Now the change list
-            out = series.MakeChangeLog(None)
-            line += '\n' + '\n'.join(out)
+            if changelog:
+                out = series.MakeChangeLog(None, False)
+                line += '\n' + '\n'.join(out)
         fd.write(line)
     fd.close()

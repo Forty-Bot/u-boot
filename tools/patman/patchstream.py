@@ -340,7 +340,7 @@ class PatchStream:
             elif line == '---':
                 self.state = STATE_DIFFS
 
-                # Output the tags (signeoff first), then change list
+                # Output the tags (signoff first), then change list
                 out = []
                 log = self.series.MakeChangeLog(self.commit)
                 out += [line]

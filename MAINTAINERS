@@ -951,6 +951,7 @@ SANDBOX
 M:	Simon Glass <sjg@chromium.org>
 S:	Maintained
 F:	arch/sandbox/
+F:	include/dt-bindings/*/sandbox*.h
 
 SH
 M:	Marek Vasut <marek.vasut+renesas@gmail.com>

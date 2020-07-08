@@ -162,6 +162,7 @@
 				&CPU2_intc 7
 				&CPU3_intc 7>;
 			reg = <0x0 0xe6000000 0x0 0x100000>;
+			clock-frequency = <60000000>;
 		};
 	};
 

@@ -144,10 +144,10 @@ config OMAP_TIMER
 
 config RISCV_TIMER
 	bool "RISC-V timer support"
-	depends on TIMER && RISCV
+	depends on TIMER && RISCV_SMODE
 	help
-	  Select this to enable support for the timer as defined
-	  by the RISC-V privileged architecture spec.
+	  Select this to enable support for a generic RISC-V S-Mode timer
+	  driver.
 
 config ROCKCHIP_TIMER
 	bool "Rockchip timer support"

@@ -8,9 +8,9 @@
  */
 
 #include <common.h>
+#include <clk.h>
 #include <dm.h>
-#include <regmap.h>
-#include <syscon.h>
+#include <timer.h>
 #include <asm/io.h>
 #include <asm/syscon.h>
 #include <linux/err.h>
@@ -24,35 +24,19 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-int riscv_get_time(u64 *time)
-{
-	/* ensure timer register base has a sane value */
-	riscv_init_ipi();
-
-	*time = readq((void __iomem *)MTIME_REG(gd->arch.clint));
-
-	return 0;
-}
-
-int riscv_set_timecmp(int hart, u64 cmp)
-{
-	/* ensure timer register base has a sane value */
-	riscv_init_ipi();
-
-	writeq(cmp, (void __iomem *)MTIMECMP_REG(gd->arch.clint, hart));
-
-	return 0;
-}
-
 int riscv_init_ipi(void)
 {
-	if (!gd->arch.clint) {
-		long *ret = syscon_get_first_range(RISCV_SYSCON_CLINT);
+	int ret;
+	struct udevice *dev;
 
-		if (IS_ERR(ret))
-			return PTR_ERR(ret);
-		gd->arch.clint = ret;
-	}
+	ret = uclass_get_device_by_driver(UCLASS_TIMER,
+					  DM_GET_DRIVER(sifive_clint), &dev);
+	if (ret)
+		return ret;
+
+	gd->arch.clint = dev_read_addr_ptr(dev);
+	if (!gd->arch.clint)
+		return -EINVAL;
 
 	return 0;
 }
@@ -78,14 +62,57 @@ int riscv_get_ipi(int hart, int *pending)
 	return 0;
 }
 
+static int sifive_clint_get_count(struct udevice *dev, u64 *count)
+{
+	*count = readq((void __iomem *)MTIME_REG(dev->priv));
+
+	return 0;
+}
+
+static const struct timer_ops sifive_clint_ops = {
+	.get_count = sifive_clint_get_count,
+};
+
+static int sifive_clint_probe(struct udevice *dev)
+{
+	int ret;
+	ofnode cpu;
+	struct timer_dev_priv *uc_priv = dev_get_uclass_priv(dev);
+	u32 rate;
+
+	dev->priv = dev_read_addr_ptr(dev);
+	if (!dev->priv)
+		return -EINVAL;
+
+	/* Did we get our clock rate from the device tree? */
+	if (uc_priv->clock_rate)
+		return 0;
+
+	/* Fall back to timebase-frequency */
+	cpu = ofnode_path("/cpus");
+	if (!ofnode_valid(cpu))
+		return -EINVAL;
+
+	ret = ofnode_read_u32(cpu, "timebase-frequency", &rate);
+	if (ret)
+		return ret;
+
+	log_warning("missing clocks or clock-frequency property, falling back on timebase-frequency\n");
+	uc_priv->clock_rate = rate;
+
+	return 0;
+}
+
 static const struct udevice_id sifive_clint_ids[] = {
-	{ .compatible = "riscv,clint0", .data = RISCV_SYSCON_CLINT },
+	{ .compatible = "riscv,clint0" },
 	{ }
 };
 
 U_BOOT_DRIVER(sifive_clint) = {
 	.name		= "sifive_clint",
-	.id		= UCLASS_SYSCON,
+	.id		= UCLASS_TIMER,
 	.of_match	= sifive_clint_ids,
+	.probe		= sifive_clint_probe,
+	.ops		= &sifive_clint_ops,
 	.flags		= DM_FLAG_PRE_RELOC,
 };

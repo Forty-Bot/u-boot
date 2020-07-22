@@ -9,5 +9,7 @@ config SIFIVE_FU540_DDR
 	bool "SiFive FU540 DDR driver"
 	depends on RAM_SIFIVE
 	default y if TARGET_SIFIVE_FU540
+	select REGMAP
+	select SPL_REGMAP if SPL
 	help
 	  This enables DDR support for the platforms based on SiFive FU540 SoC.

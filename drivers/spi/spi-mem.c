@@ -9,11 +9,11 @@
 #include <common.h>
 #include <dm.h>
 #include <errno.h>
+#include <log.h>
 #include <malloc.h>
 #include <spi.h>
 #include <spi.h>
 #include <spi-mem.h>
-#include <dm/device_compat.h>
 
 static int spi_check_buswidth_req(struct spi_slave *slave, u8 buswidth, bool tx)
 {
@@ -71,7 +71,6 @@ bool spi_mem_default_supports_op(struct spi_slave *slave,
 
 	return true;
 }
-EXPORT_SYMBOL_GPL(spi_mem_default_supports_op);
 
 /**
  * spi_mem_supports_op() - Check if a memory device and the controller it is
@@ -99,7 +98,6 @@ bool spi_mem_supports_op(struct spi_slave *slave,
 
 	return spi_mem_default_supports_op(slave, op);
 }
-EXPORT_SYMBOL_GPL(spi_mem_supports_op);
 
 /**
  * spi_mem_exec_op() - Execute a memory operation
@@ -213,7 +211,6 @@ int spi_mem_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(spi_mem_exec_op);
 
 /**
  * spi_mem_adjust_op_size() - Adjust the data size of a SPI mem operation to
@@ -261,4 +258,3 @@ int spi_mem_adjust_op_size(struct spi_slave *slave, struct spi_mem_op *op)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(spi_mem_adjust_op_size);

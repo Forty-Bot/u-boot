@@ -51,10 +51,9 @@ struct timer_ops {
 	 * Get the current timer count
 	 *
 	 * @dev: The timer device
-	 * @count: pointer that returns the current 64-bit timer count
-	 * @return: 0 if OK, -ve on error
+	 * @return: The current 64-bit timer count
 	 */
-	int (*get_count)(struct udevice *dev, u64 *count);
+	u64 (*get_count)(struct udevice *dev);
 };
 
 /*

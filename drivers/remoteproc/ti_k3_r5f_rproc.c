@@ -150,7 +150,7 @@ static int k3_r5f_lockstep_release(struct k3_r5f_cluster *cluster)
 {
 	int ret, c;
 
-	dev_dbg(dev, "%s\n", __func__);
+	debug("%s\n", __func__);
 
 	for (c = NR_CORES - 1; c >= 0; c--) {
 		ret = ti_sci_proc_power_domain_on(&cluster->cores[c]->tsp);
@@ -186,7 +186,7 @@ static int k3_r5f_split_release(struct k3_r5f_core *core)
 {
 	int ret;
 
-	dev_dbg(dev, "%s\n", __func__);
+	dev_dbg(core->dev, "%s\n", __func__);
 
 	ret = ti_sci_proc_power_domain_on(&core->tsp);
 	if (ret) {
@@ -231,25 +231,29 @@ static int k3_r5f_core_sanity_check(struct k3_r5f_core *core)
 	struct k3_r5f_cluster *cluster = core->cluster;
 
 	if (core->in_use) {
-		dev_err(dev, "Invalid op: Trying to load/start on already running core %d\n",
+		dev_err(core->dev,
+			"Invalid op: Trying to load/start on already running core %d\n",
 			core->tsp.proc_id);
 		return -EINVAL;
 	}
 
 	if (cluster->mode == CLUSTER_MODE_LOCKSTEP && !cluster->cores[1]) {
-		printf("Secondary core is not probed in this cluster\n");
+		dev_err(core->dev,
+			"Secondary core is not probed in this cluster\n");
 		return -EAGAIN;
 	}
 
 	if (cluster->mode == CLUSTER_MODE_LOCKSTEP && !is_primary_core(core)) {
-		dev_err(dev, "Invalid op: Trying to start secondary core %d in lockstep mode\n",
+		dev_err(core->dev,
+			"Invalid op: Trying to start secondary core %d in lockstep mode\n",
 			core->tsp.proc_id);
 		return -EINVAL;
 	}
 
 	if (cluster->mode == CLUSTER_MODE_SPLIT && !is_primary_core(core)) {
 		if (!core->cluster->cores[0]->in_use) {
-			dev_err(dev, "Invalid seq: Enable primary core before loading secondary core\n");
+			dev_err(core->dev,
+				"Invalid seq: Enable primary core before loading secondary core\n");
 			return -EINVAL;
 		}
 	}
@@ -401,7 +405,7 @@ static int k3_r5f_split_reset(struct k3_r5f_core *core)
 {
 	int ret;
 
-	dev_dbg(dev, "%s\n", __func__);
+	dev_dbg(core->dev, "%s\n", __func__);
 
 	if (reset_assert(&core->reset))
 		ret = -EINVAL;
@@ -416,7 +420,7 @@ static int k3_r5f_lockstep_reset(struct k3_r5f_cluster *cluster)
 {
 	int ret = 0, c;
 
-	dev_dbg(dev, "%s\n", __func__);
+	debug("%s\n", __func__);
 
 	for (c = 0; c < NR_CORES; c++)
 		if (reset_assert(&cluster->cores[c]->reset))
@@ -548,7 +552,7 @@ static int k3_r5f_rproc_configure(struct k3_r5f_core *core)
 	u64 boot_vec = 0;
 	int ret;
 
-	dev_dbg(dev, "%s\n", __func__);
+	dev_dbg(core->dev, "%s\n", __func__);
 
 	ret = ti_sci_proc_request(&core->tsp);
 	if (ret < 0)
@@ -641,7 +645,7 @@ static int k3_r5f_of_to_priv(struct k3_r5f_core *core)
 {
 	int ret;
 
-	dev_dbg(dev, "%s\n", __func__);
+	dev_dbg(core->dev, "%s\n", __func__);
 
 	core->atcm_enable = dev_read_u32_default(core->dev, "atcm-enable", 0);
 	core->btcm_enable = dev_read_u32_default(core->dev, "btcm-enable", 1);

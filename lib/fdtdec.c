@@ -1125,7 +1125,7 @@ int fdtdec_setup_memory_banksize(void)
 	return 0;
 }
 
-int fdtdec_setup_mem_size_base_lowest(void)
+static int fdtdec_setup_mem_size_base_superlative(bool lowest)
 {
 	int bank, ret, reg = 0;
 	struct resource res;
@@ -1133,7 +1133,16 @@ int fdtdec_setup_mem_size_base_lowest(void)
 	phys_size_t size;
 	ofnode mem = ofnode_null();
 
-	gd->ram_base = (unsigned long)~0;
+	/*
+	 * Size must be 1 so we don't underflow when doing the subtraction below
+	 * when lowest = false. Hopefully any real ram banks will have a greater
+	 * size :)
+	 */
+	gd->ram_size = 1;
+	if (lowest)
+		gd->ram_base = (unsigned long)~0;
+	else
+		gd->ram_base = 0;
 
 	mem = get_next_memory_node(mem);
 	if (!ofnode_valid(mem)) {
@@ -1160,15 +1169,30 @@ int fdtdec_setup_mem_size_base_lowest(void)
 		base = (unsigned long)res.start;
 		size = (phys_size_t)(res.end - res.start + 1);
 
-		if (gd->ram_base > base && size) {
+		if (!size)
+			continue;
+
+		if ((lowest && gd->ram_base > base) ||
+		    (!lowest && gd->ram_base + gd->ram_size - 1 < res.end)) {
 			gd->ram_base = base;
 			gd->ram_size = size;
-			debug("%s: Initial DRAM base %lx size %lx\n",
-			      __func__, base, (unsigned long)size);
 		}
 	}
 
+	if (gd->ram_size)
+		debug("%s: Initial DRAM base %lx size %lx\n", __func__,
+		      gd->ram_base, (unsigned long)gd->ram_size);
 	return 0;
+}
+
+int fdtdec_setup_mem_size_base_lowest(void)
+{
+	return fdtdec_setup_mem_size_base_superlative(true);
+}
+
+int fdtdec_setup_mem_size_base_highest(void)
+{
+	return fdtdec_setup_mem_size_base_superlative(false);
 }
 #endif
 

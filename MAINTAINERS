@@ -930,6 +930,7 @@ F:	doc/device-tree-bindings/mfd/kendryte,k210-sysctl.txt
 F:	doc/device-tree-bindings/pinctrl/kendryte,k210-fpioa.txt
 F:	drivers/clk/kendryte/
 F:	drivers/pinctrl/kendryte/
+F:	drivers/ram/kendryte.c
 F:	include/kendryte/
 
 RNG

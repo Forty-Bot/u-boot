@@ -1,7 +1,7 @@
 config RAM_SIFIVE
 	bool "Ram drivers support for SiFive SoCs"
 	depends on RAM && RISCV
-	default y
+	default y if TARGET_SIFIVE_FU540
 	help
 	  This enables support for ram drivers of SiFive SoCs.
 

@@ -57,9 +57,9 @@
 
 /* timeout value */
 #define CMD_TIMEOUT			8
-#define READ_TIMEOUT			3000000 /* 1 sec */
-#define WRITE_TIMEOUT			3000000 /* 1 sec */
-#define R1B_TIMEOUT			3000000 /* 1 sec */
+#define READ_TIMEOUT			30000 /* 10 ms */
+#define WRITE_TIMEOUT			30000 /* 10 ms */
+#define R1B_TIMEOUT			30000 /* 10 ms */
 
 struct mmc_spi_plat {
 	struct mmc_config cfg;

@@ -1189,6 +1189,18 @@
 			compatible = "sandbox,regmap_test";
 		};
 	};
+
+	memory@0000 {
+		device_type = "memory";
+		reg = <0x1000 0x2000>,
+		      <0x0000 0x1000>;
+	};
+
+	memory@8000 {
+		device_type = "memory";
+		reg = <0x8000 0x0000>,
+		      <0x4000 0x3000>;
+	};
 };
 
 #include "sandbox_pmic.dtsi"

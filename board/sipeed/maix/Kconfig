@@ -44,4 +44,6 @@ config BOARD_SPECIFIC_OPTIONS
 	imply RESET_SYSCON
 	imply SYSRESET
 	imply SYSRESET_SYSCON
+	imply RAM
+	imply K210_SRAM
 endif

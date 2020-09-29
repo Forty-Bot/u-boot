@@ -516,8 +516,9 @@ static int mmc_go_idle(struct mmc *mmc)
 	cmd.cmdarg = 0;
 	cmd.resp_type = MMC_RSP_NONE;
 
-	err = mmc_send_cmd(mmc, &cmd, NULL);
-
+	/* Takes around 6 tries on average */
+	err = mmc_send_cmd_quirks(mmc, &cmd, NULL,
+				  MMC_QUIRK_RETRY_GO_IDLE_STATE, 8);
 	if (err)
 		return err;
 
@@ -2454,8 +2455,7 @@ static int mmc_startup(struct mmc *mmc)
 	cmd.resp_type = MMC_RSP_R2;
 	cmd.cmdarg = mmc->rca << 16;
 
-	err = mmc_send_cmd(mmc, &cmd, NULL);
-
+	err = mmc_send_cmd_quirks(mmc, &cmd, NULL, MMC_QUIRK_RETRY_SEND_CSD, 8);
 	if (err)
 		return err;
 
@@ -2769,11 +2769,8 @@ int mmc_get_op_cond(struct mmc *mmc)
 	if (err)
 		return err;
 
-#ifdef CONFIG_MMC_QUIRKS
-	mmc->quirks = MMC_QUIRK_RETRY_SET_BLOCKLEN |
-		      MMC_QUIRK_RETRY_SEND_CID |
-		      MMC_QUIRK_RETRY_APP_CMD;
-#endif
+	if (CONFIG_IS_ENABLED(MMC_QUIRKS))
+		mmc->quirks = MMC_QUIRK_ALL;
 
 	err = mmc_power_cycle(mmc);
 	if (err) {

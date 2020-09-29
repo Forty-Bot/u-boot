@@ -336,9 +336,12 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define ENHNCD_SUPPORT		(0x2)
 #define PART_ENH_ATTRIB		(0x1f)
 
-#define MMC_QUIRK_RETRY_SEND_CID	BIT(0)
-#define MMC_QUIRK_RETRY_SET_BLOCKLEN	BIT(1)
-#define MMC_QUIRK_RETRY_APP_CMD	BIT(2)
+#define MMC_QUIRK_RETRY_GO_IDLE_STATE	BIT(0)
+#define MMC_QUIRK_RETRY_SEND_CID	BIT(1)
+#define MMC_QUIRK_RETRY_SEND_CSD	BIT(2)
+#define MMC_QUIRK_RETRY_SET_BLOCKLEN	BIT(3)
+#define MMC_QUIRK_RETRY_APP_CMD		BIT(4)
+#define MMC_QUIRK_ALL			GENMASK(4, 0)
 
 enum mmc_voltage {
 	MMC_SIGNAL_VOLTAGE_000 = 0,

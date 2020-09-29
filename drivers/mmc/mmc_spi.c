@@ -160,21 +160,38 @@ static int mmc_spi_sendcmd(struct udevice *dev,
 static int mmc_spi_readdata(struct udevice *dev,
 			    void *xbuf, u32 bcnt, u32 bsize)
 {
+	u32 off;
 	u16 crc;
-	u8 *buf = xbuf, r1;
+	u8 *r1, *buf = xbuf;
 	int i, ret = 0;
 
 	while (bcnt--) {
-		for (i = 0; i < READ_TIMEOUT; i++) {
-			ret = dm_spi_xfer(dev, 1 * 8, NULL, &r1, 0);
+		/* Optimistically read bsize bytes */
+		off = 0;
+		for (i = 0; i < READ_TIMEOUT; i += bsize) {
+			ret = dm_spi_xfer(dev, bsize * 8, NULL, buf, 0);
 			if (ret)
 				return ret;
-			if (r1 == SPI_TOKEN_SINGLE)
+			r1 = memchr(buf, SPI_TOKEN_SINGLE, bsize);
+			if (r1) {
+				off = r1 - buf;
 				break;
+			}
 		}
-		debug("%s: data tok%d 0x%x\n", __func__, i, r1);
-		if (r1 == SPI_TOKEN_SINGLE) {
-			ret = dm_spi_xfer(dev, bsize * 8, NULL, buf, 0);
+		debug("%s: data tok%d 0x%x\n", __func__, i + off, *r1);
+		if (*r1 == SPI_TOKEN_SINGLE) {
+			u32 read, unread;
+
+			/*
+			 * Copy the valid bytes to the beginning of the buffer
+			 * and read the rest of the block. We need to add 1 to
+			 * skip the first byte.
+			 */
+			unread = off + 1;
+			read = bsize - unread;
+			memmove(buf, buf + unread, read);
+
+			ret = dm_spi_xfer(dev, unread * 8, NULL, buf + read, 0);
 			if (ret)
 				return ret;
 			ret = dm_spi_xfer(dev, 2 * 8, NULL, &crc, 0);
@@ -183,22 +200,15 @@ static int mmc_spi_readdata(struct udevice *dev,
 #ifdef CONFIG_MMC_SPI_CRC_ON
 			if (be16_to_cpu(crc16_ccitt(0, buf, bsize)) != crc) {
 				debug("%s: data crc error\n", __func__);
-				r1 = R1_SPI_COM_CRC;
-				break;
+				return -ECOMM;
 			}
 #endif
 			r1 = 0;
 		} else {
-			r1 = R1_SPI_ERROR;
-			break;
+			return -ETIMEDOUT;
 		}
 		buf += bsize;
 	}
-
-	if (r1 & R1_SPI_COM_CRC)
-		ret = -ECOMM;
-	else if (r1) /* other errors */
-		ret = -ETIMEDOUT;
 
 	return ret;
 }

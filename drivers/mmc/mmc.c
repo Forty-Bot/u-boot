@@ -322,7 +322,7 @@ int mmc_set_blocklen(struct mmc *mmc, int len)
 	cmd.cmdarg = len;
 
 	return mmc_send_cmd_quirks(mmc, &cmd, NULL,
-				   MMC_QUIRK_RETRY_SET_BLOCKLEN, 4);
+				   MMC_QUIRK_RETRY_SET_BLOCKLEN, 10);
 }
 
 #ifdef MMC_SUPPORTS_TUNING

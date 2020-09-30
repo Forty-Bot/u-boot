@@ -450,7 +450,7 @@ static void dw_writer(struct dw_spi_priv *priv)
 				txw = *(u16 *)(priv->tx);
 		}
 		dw_write(priv, DW_SPI_DR, txw);
-		log_content("tx=0x%02x\n", txw);
+		log_io("tx=0x%02x\n", txw);
 		priv->tx += priv->bits_per_word >> 3;
 	}
 }
@@ -462,7 +462,7 @@ static void dw_reader(struct dw_spi_priv *priv)
 
 	while (max--) {
 		rxw = dw_read(priv, DW_SPI_DR);
-		log_content("rx=0x%02x\n", rxw);
+		log_io("rx=0x%02x\n", rxw);
 
 		/* Care about rx if the transfer's original "rx" is not null */
 		if (priv->rx_end - priv->len) {
@@ -539,7 +539,7 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	cr0 = priv->update_cr0(priv);
 
 	priv->len = bitlen >> 3;
-	log_debug("rx=%p tx=%p len=%d [bytes]\n", rx, tx, priv->len);
+	log_content("rx=%p tx=%p len=%d [bytes]\n", rx, tx, priv->len);
 
 	priv->tx = (void *)tx;
 	priv->tx_end = priv->tx + priv->len;
@@ -549,7 +549,7 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	/* Disable controller before writing control registers */
 	spi_enable_chip(priv, 0);
 
-	log_debug("cr0=%08x\n", cr0);
+	log_content("cr0=%08x\n", cr0);
 	/* Reprogram cr0 only if changed */
 	if (dw_read(priv, DW_SPI_CTRL0) != cr0)
 		dw_write(priv, DW_SPI_CTRL0, cr0);
@@ -607,10 +607,10 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	else
 		priv->tmode = CTRLR0_TMOD_TO;
 
-	log_debug("buf=%p len=%u [bytes]\n", op->data.buf.in, op->data.nbytes);
+	log_content("buf=%p len=%u [bytes]\n", op->data.buf.in, op->data.nbytes);
 
 	cr0 = priv->update_cr0(priv);
-	log_debug("cr0=%08x\n", cr0);
+	log_content("cr0=%08x\n", cr0);
 
 	spi_enable_chip(priv, 0);
 	dw_write(priv, DW_SPI_CTRL0, cr0);
@@ -673,7 +673,7 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	dw_write(priv, DW_SPI_SER, 0);
 	external_cs_manage(slave->dev, true);
 
-	log_debug("%u bytes xfered\n", op->data.nbytes);
+	log_content("%u bytes xfered\n", op->data.nbytes);
 	return ret;
 }
 

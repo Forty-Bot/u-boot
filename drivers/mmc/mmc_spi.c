@@ -19,6 +19,7 @@
 #include <asm/byteorder.h>
 #include <dm.h>
 #include <spi.h>
+#include <hexdump.h>
 
 /* MMC/SD in SPI mode reports R1 status always */
 #define R1_SPI_IDLE			BIT(0)
@@ -161,7 +162,7 @@ static int mmc_spi_readdata(struct udevice *dev,
 			    void *xbuf, u32 bcnt, u32 bsize)
 {
 	u32 off;
-	u16 crc;
+	u16 crc, data_crc;
 	u8 *r1, *buf = xbuf;
 	int i, ret = 0;
 
@@ -198,7 +199,12 @@ static int mmc_spi_readdata(struct udevice *dev,
 			if (ret)
 				return ret;
 #ifdef CONFIG_MMC_SPI_CRC_ON
-			if (be16_to_cpu(crc16_ccitt(0, buf, bsize)) != crc) {
+			data_crc = be16_to_cpu(crc16_ccitt(0, buf, bsize));
+			if (crc != data_crc) {
+				printf("wrong crc: crc=%x data_crc=%x\n",
+				       crc, data_crc);
+				print_hex_dump_bytes("", DUMP_PREFIX_OFFSET,
+						     buf, bsize);
 				debug("%s: data crc error\n", __func__);
 				return -ECOMM;
 			}

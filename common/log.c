@@ -13,7 +13,7 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-static const char *const log_cat_name[LOGC_COUNT - LOGC_NONE] = {
+static const char *const log_cat_name[] = {
 	"none",
 	"arch",
 	"board",
@@ -21,6 +21,11 @@ static const char *const log_cat_name[LOGC_COUNT - LOGC_NONE] = {
 	"driver-model",
 	"device-tree",
 	"efi",
+	"alloc",
+	"sandbox",
+	"bloblist",
+	"devres",
+	"acpi",
 };
 
 static const char *const log_level_name[LOGL_COUNT] = {
@@ -39,6 +44,9 @@ static const char *const log_level_name[LOGL_COUNT] = {
 const char *log_get_cat_name(enum log_category_t cat)
 {
 	const char *name;
+
+	compiletime_assert(ARRAY_SIZE(log_cat_name) == LOGC_COUNT - LOGC_NONE,
+			   "missing logging category name");
 
 	if (cat < 0 || cat >= LOGC_COUNT)
 		return "<invalid>";

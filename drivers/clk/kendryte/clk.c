@@ -511,23 +511,15 @@ static int k210_clk_probe(struct udevice *dev)
 	aclk_sels[0] = in0;
 	pll2_sels[0] = in0;
 
-	{
-		const struct k210_pll_params *params = &k210_plls[0];
-
+	pll = k210_create_pll(&k210_plls[0], base);
+	if (pll)
 		clk_dm(K210_CLK_PLL0,
-		       k210_register_pll("pll0", in0, base + params->off,
-					 base + params->lock_off, params->shift,
-					 params->width));
-	}
+		       k210_register_pll_struct("pll0", in0, pll));
 
-	{
-		const struct k210_pll_params *params = &k210_plls[1];
-
+	pll = k210_create_pll(&k210_plls[1], base);
+	if (pll)
 		clk_dm(K210_CLK_PLL1,
-		       k210_register_pll("pll1", in0, base + params->off,
-					 base + params->lock_off, params->shift,
-					 params->width));
-	}
+		       k210_register_pll_struct("pll1", in0, pll));
 
 	/* PLL2 is muxed, so set up a composite clock */
 	mux = k210_create_mux(&k210_muxes[MUXIFY(K210_CLK_PLL2)], base);

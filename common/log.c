@@ -13,7 +13,7 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-static const char *log_cat_name[LOGC_COUNT - LOGC_NONE] = {
+static const char *const log_cat_name[LOGC_COUNT - LOGC_NONE] = {
 	"none",
 	"arch",
 	"board",
@@ -23,7 +23,7 @@ static const char *log_cat_name[LOGC_COUNT - LOGC_NONE] = {
 	"efi",
 };
 
-static const char *log_level_name[LOGL_COUNT] = {
+static const char *const log_level_name[LOGL_COUNT] = {
 	"EMERG",
 	"ALERT",
 	"CRIT",

@@ -131,3 +131,41 @@ static int dm_test_fdtdec_add_reserved_memory(struct unit_test_state *uts)
 }
 DM_TEST(dm_test_fdtdec_add_reserved_memory,
 	UT_TESTF_SCAN_PDATA | UT_TESTF_SCAN_FDT | UT_TESTF_FLAT_TREE);
+
+static int _dm_test_fdtdec_setup_mem(struct unit_test_state *uts)
+{
+	ut_assertok(fdtdec_setup_mem_size_base());
+	ut_asserteq(0x1000, gd->ram_base);
+	ut_asserteq(0x2000, gd->ram_size);
+
+	ut_assertok(fdtdec_setup_mem_size_base_lowest());
+	ut_asserteq(0x0000, gd->ram_base);
+	ut_asserteq(0x1000, gd->ram_size);
+
+	ut_assertok(fdtdec_setup_mem_size_base_highest());
+	ut_asserteq(0x4000, gd->ram_base);
+	ut_asserteq(0x3000, gd->ram_size);
+
+	return 0;
+}
+
+/*
+ * We need to wrap the actual test so that we don't overwrite the ram parameters
+ * for the rest of U-Boot
+ */
+static int dm_test_fdtdec_setup_mem(struct unit_test_state *uts)
+{
+	int ret;
+	unsigned long base, size;
+
+	base = gd->ram_base;
+	size = gd->ram_size;
+
+	ret = _dm_test_fdtdec_setup_mem(uts);
+
+	gd->ram_base = base;
+	gd->ram_size = size;
+
+	return ret;
+}
+DM_TEST(dm_test_fdtdec_setup_mem, UT_TESTF_SCAN_FDT | UT_TESTF_FLAT_TREE);

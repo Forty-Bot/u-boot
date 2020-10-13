@@ -42,6 +42,8 @@ config BOARD_SPECIFIC_OPTIONS
 	imply CLK_K210
 	imply DM_RESET
 	imply RESET_SYSCON
+	imply RAM
+	imply K210_SRAM
 	imply SYSRESET
 	imply SYSRESET_SYSCON
 	imply PINCTRL

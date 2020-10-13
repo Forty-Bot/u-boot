@@ -11,7 +11,6 @@
 #include <log.h>
 #include <mapmem.h>
 
-#include <kendryte/bypass.h>
 #include <kendryte/pll.h>
 
 /* All methods are delegated to CCF clocks */
@@ -347,10 +346,6 @@ static const struct k210_comp_params k210_comps[] = {
 #undef COMP_NOMUX_ID
 #undef COMP_LIST
 
-static struct clk *k210_bypass_children = {
-	NULL,
-};
-
 /* Helper functions to create sub-clocks */
 static struct clk_mux *k210_create_mux(const struct k210_mux_params *params,
 				       void *base)
@@ -476,13 +471,20 @@ cleanup_mux:
 	return comp;
 }
 
-static bool probed;
+static bool __section(.data) probed;
+
+/* reset probed so we will probe again post-relocation */
+static int k210_clk_bind(struct udevice *dev)
+{
+	probed = false;
+	return 0;
+}
 
 static int k210_clk_probe(struct udevice *dev)
 {
 	int ret;
 	const char *in0;
-	struct clk *in0_clk, *bypass;
+	struct clk *in0_clk;
 	struct clk_mux *mux;
 	struct clk_divider *div;
 	struct k210_pll *pll;
@@ -516,27 +518,15 @@ static int k210_clk_probe(struct udevice *dev)
 	aclk_sels[0] = in0;
 	pll2_sels[0] = in0;
 
-	/*
-	 * All PLLs have a broken bypass, but pll0 has the CPU downstream, so we
-	 * need to manually reparent it whenever we configure pll0
-	 */
 	pll = k210_create_pll(&k210_plls[0], base);
-	if (pll) {
-		bypass = k210_register_bypass("pll0", in0, &pll->clk,
-					      &k210_pll_ops, in0_clk);
-		clk_dm(K210_CLK_PLL0, bypass);
-	} else {
-		return -ENOMEM;
-	}
+	if (pll)
+		clk_dm(K210_CLK_PLL0,
+		       k210_register_pll_struct("pll0", in0, pll));
 
-	{
-		const struct k210_pll_params *params = &k210_plls[1];
-
+	pll = k210_create_pll(&k210_plls[1], base);
+	if (pll)
 		clk_dm(K210_CLK_PLL1,
-		       k210_register_pll("pll1", in0, base + params->off,
-					 base + params->lock_off, params->shift,
-					 params->width));
-	}
+		       k210_register_pll_struct("pll1", in0, pll));
 
 	/* PLL2 is muxed, so set up a composite clock */
 	mux = k210_create_mux(&k210_muxes[MUXIFY(K210_CLK_PLL2)], base);
@@ -565,18 +555,12 @@ static int k210_clk_probe(struct udevice *dev)
 		free(mux);
 		free(div);
 	} else {
-		struct clk *aclk =
-			clk_register_composite(NULL, "aclk", aclk_sels,
-					       ARRAY_SIZE(aclk_sels),
-					       &mux->clk, &clk_mux_ops,
-					       &div->clk, &clk_divider_ops,
-					       NULL, NULL, 0);
-		clk_dm(K210_CLK_ACLK, aclk);
-		if (!IS_ERR(aclk)) {
-			k210_bypass_children = aclk;
-			k210_bypass_set_children(bypass,
-						 &k210_bypass_children, 1);
-		}
+		clk_dm(K210_CLK_ACLK,
+		       clk_register_composite(NULL, "aclk", aclk_sels,
+					      ARRAY_SIZE(aclk_sels),
+					      &mux->clk, &clk_mux_ops,
+					      &div->clk, &clk_divider_ops,
+					      NULL, NULL, 0));
 	}
 
 #define REGISTER_COMP(id, name) \
@@ -648,7 +632,7 @@ static int k210_clk_probe(struct udevice *dev)
 
 	/* The MTIME register in CLINT runs at one 50th the CPU clock speed */
 	clk_dm(K210_CLK_CLINT,
-	       clk_register_fixed_factor(NULL, "clint", "cpu", 0, 1, 50));
+	       clk_register_fixed_factor(NULL, "clint", "aclk", 0, 1, 50));
 
 	return 0;
 }
@@ -663,5 +647,6 @@ U_BOOT_DRIVER(k210_clk) = {
 	.id = UCLASS_CLK,
 	.of_match = k210_clk_ids,
 	.ops = &k210_clk_ops,
+	.bind = k210_clk_bind,
 	.probe = k210_clk_probe,
 };

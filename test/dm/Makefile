@@ -91,5 +91,8 @@ obj-$(CONFIG_SCMI_FIRMWARE) += scmi.o
 ifneq ($(CONFIG_PINMUX),)
 obj-$(CONFIG_PINCONF) += pinmux.o
 endif
+ifneq ($(CONFIG_EFI_PARTITION)$(CONFIG_FASTBOOT_FLASH_MMC),)
+obj-y += fastboot.o
+endif
 endif
 endif # !SPL

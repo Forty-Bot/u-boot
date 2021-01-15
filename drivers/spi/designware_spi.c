@@ -123,9 +123,13 @@ struct dw_spi_priv {
 	struct reset_ctl_bulk resets;
 	struct gpio_desc cs_gpio;	/* External chip-select gpio */
 
-	u32 (*update_cr0)(struct dw_spi_priv *priv);
-
 	void __iomem *regs;
+/* DW SPI capabilities */
+#define DW_SPI_CAP_CS_OVERRIDE		BIT(0) /* Unimplemented */
+#define DW_SPI_CAP_KEEMBAY_MST		BIT(1) /* Unimplemented */
+#define DW_SPI_CAP_DWC_SSI		BIT(2)
+#define DW_SPI_CAP_DFS32		BIT(3)
+	unsigned long caps;
 	unsigned long bus_clk_rate;
 	unsigned int freq;		/* Default frequency */
 	unsigned int mode;
@@ -135,7 +139,6 @@ struct dw_spi_priv {
 	void *rx;
 	void *rx_end;
 	u32 fifo_len;			/* depth of the FIFO buffer */
-	u32 max_xfer;			/* Maximum transfer size (in bits) */
 
 	int bits_per_word;
 	int len;
@@ -154,51 +157,30 @@ static inline void dw_write(struct dw_spi_priv *priv, u32 offset, u32 val)
 	__raw_writel(val, priv->regs + offset);
 }
 
-static u32 dw_spi_dw16_update_cr0(struct dw_spi_priv *priv)
+static u32 dw_spi_update_cr0(struct dw_spi_priv *priv)
 {
-	return FIELD_PREP(CTRLR0_DFS_MASK, priv->bits_per_word - 1)
-	     | FIELD_PREP(CTRLR0_FRF_MASK, priv->type)
-	     | FIELD_PREP(CTRLR0_MODE_MASK, priv->mode)
-	     | FIELD_PREP(CTRLR0_TMOD_MASK, priv->tmode);
-}
+	u32 cr0;
 
-static u32 dw_spi_dw32_update_cr0(struct dw_spi_priv *priv)
-{
-	return FIELD_PREP(CTRLR0_DFS_32_MASK, priv->bits_per_word - 1)
-	     | FIELD_PREP(CTRLR0_FRF_MASK, priv->type)
-	     | FIELD_PREP(CTRLR0_MODE_MASK, priv->mode)
-	     | FIELD_PREP(CTRLR0_TMOD_MASK, priv->tmode);
-}
-
-static u32 dw_spi_dwc_update_cr0(struct dw_spi_priv *priv)
-{
-	return FIELD_PREP(DWC_SSI_CTRLR0_DFS_MASK, priv->bits_per_word - 1)
-	     | FIELD_PREP(DWC_SSI_CTRLR0_FRF_MASK, priv->type)
-	     | FIELD_PREP(DWC_SSI_CTRLR0_MODE_MASK, priv->mode)
-	     | FIELD_PREP(DWC_SSI_CTRLR0_TMOD_MASK, priv->tmode);
-}
-
-static int dw_spi_apb_init(struct udevice *bus, struct dw_spi_priv *priv)
-{
-	/* If we read zeros from DFS, then we need to use DFS_32 instead */
-	dw_write(priv, DW_SPI_SSIENR, 0);
-	dw_write(priv, DW_SPI_CTRLR0, 0xffffffff);
-	if (FIELD_GET(CTRLR0_DFS_MASK, dw_read(priv, DW_SPI_CTRLR0))) {
-		priv->max_xfer = 16;
-		priv->update_cr0 = dw_spi_dw16_update_cr0;
+	if (priv->caps & DW_SPI_CAP_DWC_SSI) {
+		cr0 = FIELD_PREP(DWC_SSI_CTRLR0_DFS_MASK,
+				 priv->bits_per_word - 1)
+		    | FIELD_PREP(DWC_SSI_CTRLR0_FRF_MASK, priv->type)
+		    | FIELD_PREP(DWC_SSI_CTRLR0_MODE_MASK, priv->mode)
+		    | FIELD_PREP(DWC_SSI_CTRLR0_TMOD_MASK, priv->tmode);
 	} else {
-		priv->max_xfer = 32;
-		priv->update_cr0 = dw_spi_dw32_update_cr0;
+		if (priv->caps & DW_SPI_CAP_DFS32)
+			cr0 = FIELD_PREP(CTRLR0_DFS_32_MASK,
+					 priv->bits_per_word - 1);
+		else
+			cr0 = FIELD_PREP(CTRLR0_DFS_MASK,
+					 priv->bits_per_word - 1);
+
+		cr0 |= FIELD_PREP(CTRLR0_FRF_MASK, priv->type)
+		    |  FIELD_PREP(CTRLR0_MODE_MASK, priv->mode)
+		    |  FIELD_PREP(CTRLR0_TMOD_MASK, priv->tmode);
 	}
 
-	return 0;
-}
-
-static int dw_spi_dwc_init(struct udevice *bus, struct dw_spi_priv *priv)
-{
-	priv->max_xfer = 32;
-	priv->update_cr0 = dw_spi_dwc_update_cr0;
-	return 0;
+	return cr0;
 }
 
 static int request_gpio_cs(struct udevice *bus)
@@ -251,8 +233,26 @@ static int dw_spi_of_to_plat(struct udevice *bus)
 /* Restart the controller, disable all interrupts, clean rx fifo */
 static void spi_hw_init(struct udevice *bus, struct dw_spi_priv *priv)
 {
+	u32 cr0;
+
 	dw_write(priv, DW_SPI_SSIENR, 0);
 	dw_write(priv, DW_SPI_IMR, 0);
+
+	/*
+	 * Detect features by writing CTRLR0 and seeing which fields remain
+	 * zeroed.
+	 */
+	dw_write(priv, DW_SPI_SSIENR, 0);
+	dw_write(priv, DW_SPI_CTRLR0, 0xffffffff);
+	cr0 = dw_read(priv, DW_SPI_CTRLR0);
+
+	/*
+	 * DWC_SPI always has DFS_32. If we read zeros from DFS, then we need to
+	 * use DFS_32 instead
+	 */
+	if (priv->caps & DW_SPI_CAP_DWC_SSI || !FIELD_GET(CTRLR0_DFS_MASK, cr0))
+		priv->caps |= DW_SPI_CAP_DFS32;
+
 	dw_write(priv, DW_SPI_SSIENR, 1);
 
 	/*
@@ -271,7 +271,6 @@ static void spi_hw_init(struct udevice *bus, struct dw_spi_priv *priv)
 		priv->fifo_len = (fifo == 1) ? 0 : fifo;
 		dw_write(priv, DW_SPI_TXFTLR, 0);
 	}
-	dev_dbg(bus, "fifo_len=%d\n", priv->fifo_len);
 }
 
 /*
@@ -337,11 +336,8 @@ static int dw_spi_reset(struct udevice *bus)
 	return 0;
 }
 
-typedef int (*dw_spi_init_t)(struct udevice *bus, struct dw_spi_priv *priv);
-
 static int dw_spi_probe(struct udevice *bus)
 {
-	dw_spi_init_t init = (dw_spi_init_t)dev_get_driver_data(bus);
 	struct dw_spi_plat *plat = dev_get_plat(bus);
 	struct dw_spi_priv *priv = dev_get_priv(bus);
 	int ret;
@@ -358,24 +354,20 @@ static int dw_spi_probe(struct udevice *bus)
 	if (ret)
 		return ret;
 
-	if (!init)
-		return -EINVAL;
-	ret = init(bus, priv);
-	if (ret)
-		return ret;
-
-	version = dw_read(priv, DW_SPI_VERSION);
-	dev_dbg(bus, "ssi_version_id=%c.%c%c%c ssi_max_xfer_size=%u\n",
-		version >> 24, version >> 16, version >> 8, version,
-		priv->max_xfer);
-
 	/* Currently only bits_per_word == 8 supported */
 	priv->bits_per_word = 8;
 
 	priv->tmode = 0; /* Tx & Rx */
 
 	/* Basic HW init */
+	priv->caps = dev_get_driver_data(bus);
 	spi_hw_init(bus, priv);
+
+	version = dw_read(priv, DW_SPI_VERSION);
+	dev_dbg(bus,
+		"ssi_version_id=%c.%c%c%c ssi_rx_fifo_depth=%u ssi_max_xfer_size=%u\n",
+		version >> 24, version >> 16, version >> 8, version,
+		priv->fifo_len, priv->caps & DW_SPI_CAP_DFS32 ? 32 : 16);
 
 	return 0;
 }
@@ -510,7 +502,7 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 		 */
 		priv->tmode = CTRLR0_TMOD_TR;
 
-	cr0 = priv->update_cr0(priv);
+	cr0 = dw_spi_update_cr0(priv);
 
 	priv->len = bitlen >> 3;
 
@@ -582,7 +574,7 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	else
 		priv->tmode = CTRLR0_TMOD_TO;
 
-	cr0 = priv->update_cr0(priv);
+	cr0 = dw_spi_update_cr0(priv);
 	dev_dbg(bus, "cr0=%08x buf=%p len=%u [bytes]\n", cr0, op->data.buf.in,
 		op->data.nbytes);
 
@@ -742,15 +734,15 @@ static const struct dm_spi_ops dw_spi_ops = {
 static const struct udevice_id dw_spi_ids[] = {
 	/* Generic compatible strings */
 
-	{ .compatible = "snps,dw-apb-ssi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "snps,dw-apb-ssi-3.20a", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "snps,dw-apb-ssi-3.22a", .data = (ulong)dw_spi_apb_init },
+	{ .compatible = "snps,dw-apb-ssi" },
+	{ .compatible = "snps,dw-apb-ssi-3.20a" },
+	{ .compatible = "snps,dw-apb-ssi-3.22a" },
 	/* First version with SSI_MAX_XFER_SIZE */
-	{ .compatible = "snps,dw-apb-ssi-3.23a", .data = (ulong)dw_spi_apb_init },
-	/* First version with Dual/Quad SPI; unused by this driver */
-	{ .compatible = "snps,dw-apb-ssi-4.00a", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "snps,dw-apb-ssi-4.01", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "snps,dwc-ssi-1.01a", .data = (ulong)dw_spi_dwc_init },
+	{ .compatible = "snps,dw-apb-ssi-3.23a" },
+	/* First version with Dual/Quad SPI */
+	{ .compatible = "snps,dw-apb-ssi-4.00a" },
+	{ .compatible = "snps,dw-apb-ssi-4.01" },
+	{ .compatible = "snps,dwc-ssi-1.01a", .data = DW_SPI_CAP_DWC_SSI },
 
 	/* Compatible strings for specific SoCs */
 
@@ -759,16 +751,19 @@ static const struct udevice_id dw_spi_ids[] = {
 	 * version of this device. This compatible string is used for those
 	 * devices, and is not used for sofpgas in general.
 	 */
-	{ .compatible = "altr,socfpga-spi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "altr,socfpga-arria10-spi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "canaan,kendryte-k210-spi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "canaan,kendryte-k210-ssi", .data = (ulong)dw_spi_dwc_init },
-	{ .compatible = "intel,stratix10-spi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "intel,agilex-spi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "mscc,ocelot-spi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "mscc,jaguar2-spi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "snps,axs10x-spi", .data = (ulong)dw_spi_apb_init },
-	{ .compatible = "snps,hsdk-spi", .data = (ulong)dw_spi_apb_init },
+	{ .compatible = "altr,socfpga-spi" },
+	{ .compatible = "altr,socfpga-arria10-spi" },
+	{ .compatible = "canaan,kendryte-k210-spi" },
+	{
+		.compatible = "canaan,kendryte-k210-ssi",
+		.data = DW_SPI_CAP_DWC_SSI,
+	},
+	{ .compatible = "intel,stratix10-spi" },
+	{ .compatible = "intel,agilex-spi" },
+	{ .compatible = "mscc,ocelot-spi" },
+	{ .compatible = "mscc,jaguar2-spi" },
+	{ .compatible = "snps,axs10x-spi" },
+	{ .compatible = "snps,hsdk-spi" },
 	{ }
 };
 

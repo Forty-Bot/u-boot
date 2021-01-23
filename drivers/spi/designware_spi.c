@@ -218,7 +218,8 @@ static u32 dw_spi_update_cr0(struct dw_spi_priv *priv)
 				 priv->bits_per_word - 1)
 		    | FIELD_PREP(DWC_SSI_CTRLR0_FRF_MASK, priv->type)
 		    | FIELD_PREP(DWC_SSI_CTRLR0_MODE_MASK, priv->mode)
-		    | FIELD_PREP(DWC_SSI_CTRLR0_TMOD_MASK, priv->tmode);
+		    | FIELD_PREP(DWC_SSI_CTRLR0_TMOD_MASK, priv->tmode)
+		    | FIELD_PREP(DWC_SSI_CTRLR0_SPI_FRF_MASK, priv->spi_frf);
 	} else {
 		if (priv->caps & DW_SPI_CAP_DFS32)
 			cr0 = FIELD_PREP(CTRLR0_DFS_32_MASK,
@@ -229,10 +230,34 @@ static u32 dw_spi_update_cr0(struct dw_spi_priv *priv)
 
 		cr0 |= FIELD_PREP(CTRLR0_FRF_MASK, priv->type)
 		    |  FIELD_PREP(CTRLR0_MODE_MASK, priv->mode)
-		    |  FIELD_PREP(CTRLR0_TMOD_MASK, priv->tmode);
+		    |  FIELD_PREP(CTRLR0_TMOD_MASK, priv->tmode)
+		    |  FIELD_PREP(CTRLR0_SPI_FRF_MASK, priv->spi_frf);
 	}
 
 	return cr0;
+}
+
+static u32 dw_spi_update_spi_cr0(const struct spi_mem_op *op)
+{
+	uint trans_type, wait_cycles;
+
+	/* This assumes support_op has filtered invalid types */
+	if (op->addr.buswidth == 1)
+		trans_type = SPI_CTRLR0_TRANS_TYPE_1_1_X;
+	else if (op->cmd.buswidth == 1)
+		trans_type = SPI_CTRLR0_TRANS_TYPE_1_X_X;
+	else
+		trans_type = SPI_CTRLR0_TRANS_TYPE_X_X_X;
+
+	if (op->dummy.buswidth)
+		wait_cycles = op->dummy.nbytes * 8 / op->dummy.buswidth;
+	else
+		wait_cycles = 0;
+
+	return FIELD_PREP(SPI_CTRLR0_TRANS_TYPE_MASK, trans_type)
+	       | FIELD_PREP(SPI_CTRLR0_ADDR_L_MASK, op->addr.nbytes * 2)
+	       | FIELD_PREP(SPI_CTRLR0_INST_L_MASK, INST_L_8)
+	       | FIELD_PREP(SPI_CTRLR0_WAIT_CYCLES_MASK, wait_cycles)
 }
 
 static int request_gpio_cs(struct udevice *bus)
@@ -619,6 +644,13 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	u32 val, cs;
 	uint frames;
 
+	/* DUAL/QUAD/OCTAL only supported by exec_op for now */
+	if (priv->mode & (SPI_TX_DUAL | SPI_TX_QUAD | SPI_TX_OCTAL |
+			  SPI_RX_DUAL | SPI_RX_QUAD | SPI_RX_OCTAL))
+		return -1;
+
+	priv->spi_frf = CTRLR0_SPI_FRF_BYTE;
+
 	/* spi core configured to do 8 bit transfers */
 	if (bitlen % priv->bits_per_word) {
 		dev_err(dev, "Non byte aligned SPI transfer.\n");
@@ -697,6 +729,9 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 /*
  * This function is necessary for reading SPI flash with the native CS
  * c.f. https://lkml.org/lkml/2015/12/23/132
+ *
+ * It also lets us handle DUAL/QUAD/OCTAL transfers in a much more idiomatic
+ * way.
  */
 static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 {
@@ -707,37 +742,72 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	struct spi_mem_op *mut_op = (struct spi_mem_op *)op;
 	u8 op_len = sizeof(op->cmd.opcode) + op->addr.nbytes + op->dummy.nbytes;
 	u8 op_buf[op_len];
-	u32 cr0, val;
+	u32 cr0, spi_cr0, val;
+
+	/* Only bytes are supported for spi-mem transfers */
+	if (priv->bits_per_word != 8)
+		return -EINVAL;
+
+	switch (op->data.buswidth) {
+	case 0:
+	case 1:
+		priv->spi_frf = CTRLR0_SPI_FRF_BYTE;
+		break;
+	case 2:
+		priv->spi_frf = CTRLR0_SPI_FRF_DUAL;
+		break;
+	case 4:
+		priv->spi_frf = CTRLR0_SPI_FRF_QUAD;
+		break;
+	case 8:
+		priv->spi_frf = CTRLR0_SPI_FRF_OCTAL;
+		break;
+	/* BUG: should have been filtered out by supports_op */
+	default:
+		return -EINVAL;
+	}
 
 	if (read)
-		priv->tmode = CTRLR0_TMOD_EPROMREAD;
+		if (priv->spi_frf == CTRLR0_SPI_FRF_BYTE)
+			priv->tmode = CTRLR0_TMOD_EPROMREAD;
+		else
+			priv->tmode = CTRLR0_TMOD_RO;
 	else
 		priv->tmode = CTRLR0_TMOD_TO;
 
 	cr0 = dw_spi_update_cr0(priv);
-	dev_dbg(bus, "cr0=%08x buf=%p len=%u [bytes]\n", cr0, op->data.buf.in,
-		op->data.nbytes);
+	spi_cr0 = dw_spi_update_spi_cr0(op);
+	dev_dbg(bus, "cr0=%08x spi_cr0=%08x buf=%p len=%u [bytes]\n", cr0,
+		spi_cr0, op->data.buf.in, op->data.nbytes);
 
 	dw_write(priv, DW_SPI_SSIENR, 0);
 	dw_write(priv, DW_SPI_CTRLR0, cr0);
 	if (read)
 		dw_write(priv, DW_SPI_CTRLR1, op->data.nbytes - 1);
+	if (priv->spi_frf != CTRLR0_SPI_FRF_BYTE)
+		dw_write(priv, DW_SPI_SPI_CTRL0, spi_cr0);
 	dw_write(priv, DW_SPI_SSIENR, 1);
 
-	/* From spi_mem_exec_op */
-	pos = 0;
-	op_buf[pos++] = op->cmd.opcode;
-	if (op->addr.nbytes) {
-		for (i = 0; i < op->addr.nbytes; i++)
-			op_buf[pos + i] = op->addr.val >>
-				(8 * (op->addr.nbytes - i - 1));
+	/* Write out the instruction */
+	if (priv->spi_frf == CTRLR0_SPI_FRF_BYTE) {
+		/* From spi_mem_exec_op */
+		pos = 0;
+		op_buf[pos++] = op->cmd.opcode;
+		if (op->addr.nbytes) {
+			for (i = 0; i < op->addr.nbytes; i++)
+				op_buf[pos + i] = op->addr.val >>
+					(8 * (op->addr.nbytes - i - 1));
 
-		pos += op->addr.nbytes;
-	}
-	if (op->dummy.nbytes)
+			pos += op->addr.nbytes;
+		}
 		memset(op_buf + pos, 0xff, op->dummy.nbytes);
 
-	dw_writer(priv, &op_buf, 0, op_len, 0, sizeof(u8));
+		dw_writer(priv, &op_buf, 0, op_len, 0, sizeof(u8));
+	} else {
+		/* MUST be written as byte/long; don't ask me why */
+		writeb(op->cmd.opcode, priv->regs + DW_SPI_DR);
+		writel(op->addr.val, priv->regs + DW_SPI_DR);
+	}
 
 	external_cs_manage(slave->dev, false);
 	dw_write(priv, DW_SPI_SER, 1 << spi_chip_select(slave->dev));
@@ -771,6 +841,37 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	return ret;
 }
 
+bool dw_spi_supports_op(struct spi_slave *slave, const struct spi_mem_op *op)
+{
+	struct dw_spi_priv *priv = dev_get_priv(slave->dev->parent);
+
+	if (!spi_mem_default_supports_op(slave, op))
+		return false;
+
+	/*
+	 * Everything before the data must fit in the fifo.
+	 * In EEPROM mode we also need to fit the dummy.
+	 */
+	if (1 + op->addr.nbytes +
+	    (op->data.buswidth == 1 ? op->dummy.nbytes : 0) > priv->fifo_len)
+		return false;
+
+	/* We only support 1_1_X, 1_X_X, and X_X_X formats */
+	if (op->cmd.buswidth == 1 &&
+	    (!op->addr.nbytes || op->addr.buswidth == 1))
+		return true;
+
+	if (op->cmd.buswidth == 1 &&
+	    (!op->addr.nbytes || op->addr.buswidth == op->data.buswidth))
+		return true;
+
+	if (op->cmd.buswidth == op->data.buswidth &&
+	    (!op->addr.nbytes || op->addr.buswidth == op->data.buswidth))
+		return true;
+
+	return false;
+}
+
 /* The size of ctrl1 limits data transfers to 64K */
 static int dw_spi_adjust_op_size(struct spi_slave *slave, struct spi_mem_op *op)
 {
@@ -781,6 +882,7 @@ static int dw_spi_adjust_op_size(struct spi_slave *slave, struct spi_mem_op *op)
 
 static const struct spi_controller_mem_ops dw_spi_mem_ops = {
 	.exec_op = dw_spi_exec_op,
+	.supports_op = dw_spi_supports_op,
 	.adjust_op_size = dw_spi_adjust_op_size,
 };
 

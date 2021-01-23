@@ -134,14 +134,10 @@ struct dw_spi_priv {
 	unsigned int freq;		/* Default frequency */
 	unsigned int mode;
 
-	const void *tx;
-	const void *tx_end;
-	void *rx;
-	void *rx_end;
 	u32 fifo_len;			/* depth of the FIFO buffer */
 
 	int bits_per_word;
-	int len;
+	int frames;			/* Number of frames in the transfer */
 	u8 cs;				/* chip select pin */
 	u8 tmode;			/* TR/TO/RO/EEPROM */
 	u8 type;			/* SPI/SSP/MicroWire */
@@ -372,14 +368,24 @@ static int dw_spi_probe(struct udevice *bus)
 	return 0;
 }
 
-/* Return the max entries we can fill into tx fifo */
-static inline u32 tx_max(struct dw_spi_priv *priv)
+/**
+ * dw_writer() - Write data frames to the tx fifo
+ * @priv: Driver private info
+ * @tx: The tx buffer
+ * @idx: The number of data frames already transmitted
+ * @tx_frames: The number of data frames left to transmit
+ * @rx_frames: The number of data frames left to receive (0 if only
+ *             transmitting)
+ * @frame_bytes: The number of bytes taken up by one data frame
+ *
+ * This function writes up to @tx_frames data frames using data from @tx[@idx].
+ *
+ * Return: The number of frames read
+ */
+static uint dw_writer(struct dw_spi_priv *priv, const void *tx, uint idx,
+		      uint tx_frames, uint rx_frames, uint frame_bytes)
 {
-	u32 tx_left, tx_room, rxtx_gap;
-
-	tx_left = (priv->tx_end - priv->tx) / (priv->bits_per_word >> 3);
-	tx_room = priv->fifo_len - dw_read(priv, DW_SPI_TXFLR);
-
+	u32 tx_room = priv->fifo_len - dw_read(priv, DW_SPI_TXFLR);
 	/*
 	 * Another concern is about the tx/rx mismatch, we
 	 * thought about using (priv->fifo_len - rxflr - txflr) as
@@ -388,67 +394,131 @@ static inline u32 tx_max(struct dw_spi_priv *priv)
 	 * shift registers. So a control from sw point of
 	 * view is taken.
 	 */
-	rxtx_gap = ((priv->rx_end - priv->rx) - (priv->tx_end - priv->tx)) /
-		(priv->bits_per_word >> 3);
+	u32 rxtx_gap = rx_frames - tx_frames;
+	u32 count = min3(tx_frames, tx_room, (u32)(priv->fifo_len - rxtx_gap));
+	u32 *dr = priv->regs + DW_SPI_DR;
 
-	return min3(tx_left, tx_room, (u32)(priv->fifo_len - rxtx_gap));
-}
+	if (!count)
+		return 0;
 
-/* Return the max entries we should read out of rx fifo */
-static inline u32 rx_max(struct dw_spi_priv *priv)
-{
-	u32 rx_left = (priv->rx_end - priv->rx) / (priv->bits_per_word >> 3);
-
-	return min_t(u32, rx_left, dw_read(priv, DW_SPI_RXFLR));
-}
-
-static void dw_writer(struct dw_spi_priv *priv)
-{
-	u32 max = tx_max(priv);
-	u32 txw = 0xFFFFFFFF;
-
-	while (max--) {
-		/* Set the tx word if the transfer's original "tx" is not null */
-		if (priv->tx_end - priv->len) {
-			if (priv->bits_per_word == 8)
-				txw = *(u8 *)(priv->tx);
-			else
-				txw = *(u16 *)(priv->tx);
-		}
-		dw_write(priv, DW_SPI_DR, txw);
-		log_content("tx=0x%02x\n", txw);
-		priv->tx += priv->bits_per_word >> 3;
+#define do_write(type) do { \
+	type *start = ((type *)tx) + idx; \
+	type *end = start + count; \
+	do { \
+		__raw_writel(*start++, dr); \
+	} while (start < end); \
+} while (0)
+	switch (frame_bytes) {
+	case 1:
+		do_write(u8);
+		break;
+	case 2:
+		do_write(u16);
+		break;
+	case 3:
+	case 4:
+	default:
+		do_write(u32);
+		break;
 	}
+#undef do_write
+
+	return count;
 }
 
-static void dw_reader(struct dw_spi_priv *priv)
+/**
+ * dw_reader() - Read data frames from the rx fifo
+ * @priv: Driver private data
+ * @rx: The rx buffer
+ * @idx: The number of data frames already received
+ * @frames: The number of data frames left to receive
+ * @frame_bytes: The size of a data frame in bytes
+ *
+ * This function reads up to @frames data frames from @rx[@idx].
+ *
+ * Return: The number of frames read
+ */
+static uint dw_reader(struct dw_spi_priv *priv, void *rx, uint idx, uint frames,
+		      uint frame_bytes)
 {
-	u32 max = rx_max(priv);
-	u16 rxw;
+	u32 rx_lvl = dw_read(priv, DW_SPI_RXFLR);
+	u32 count = min(frames, rx_lvl);
+	u32 *dr = priv->regs + DW_SPI_DR;
 
-	while (max--) {
-		rxw = dw_read(priv, DW_SPI_DR);
-		log_content("rx=0x%02x\n", rxw);
+	if (!count)
+		return 0;
 
-		/* Care about rx if the transfer's original "rx" is not null */
-		if (priv->rx_end - priv->len) {
-			if (priv->bits_per_word == 8)
-				*(u8 *)(priv->rx) = rxw;
-			else
-				*(u16 *)(priv->rx) = rxw;
-		}
-		priv->rx += priv->bits_per_word >> 3;
+#define do_read(type) do { \
+	type *start = ((type *)rx) + idx; \
+	type *end = start + count; \
+	do { \
+		*start++ = __raw_readl(dr); \
+	} while (start < end); \
+} while (0)
+	switch (frame_bytes) {
+	case 1:
+		do_read(u8);
+		break;
+	case 2:
+		do_read(u16);
+		break;
+	case 3:
+	case 4:
+	default:
+		do_read(u32);
+		break;
 	}
+#undef do_read
+
+	return count;
 }
 
-static int poll_transfer(struct dw_spi_priv *priv)
+/**
+ * poll_transfer() - Transmit and receive data frames
+ * @priv: Driver private data
+ * @tx: The tx buffer. May be %NULL to only receive.
+ * @rx: The rx buffer. May be %NULL to discard read data.
+ * @frames: The number of data frames to transfer
+ *
+ * Transmit @tx, while recieving @rx.
+ *
+ * Return: The lesser of the number of frames transmitted or received.
+ */
+static uint poll_transfer(struct dw_spi_priv *priv, const void *tx, void *rx,
+			  uint frames)
 {
-	do {
-		dw_writer(priv);
-		dw_reader(priv);
-	} while (priv->rx_end > priv->rx);
+	uint frame_bytes = priv->bits_per_word >> 3;
+	uint tx_idx = 0;
+	uint rx_idx = 0;
+	uint tx_frames = tx ? frames : 0;
+	uint rx_frames = rx ? frames : 0;
 
-	return 0;
+	while (tx_frames || rx_frames) {
+		if (tx_frames) {
+			uint tx_diff = dw_writer(priv, tx, tx_idx, tx_frames,
+						 rx_frames, frame_bytes);
+
+			tx_idx += tx_diff;
+			tx_frames -= tx_diff;
+		}
+
+		if (rx_frames) {
+			uint rx_diff = dw_reader(priv, rx, rx_idx, rx_frames,
+						 frame_bytes);
+
+			rx_idx += rx_diff;
+			rx_frames -= rx_diff;
+		}
+
+		/*
+		 * If we don't read/write fast enough, the transfer stops.
+		 * Don't bother reading out what's left in the FIFO; it's
+		 * garbage.
+		 */
+		if (dw_read(priv, DW_SPI_RISR) & (ISR_RXOI | ISR_TXUI))
+			break;
+	}
+	return min(tx ? tx_idx : rx_idx, rx ? rx_idx : tx_idx);
 }
 
 /*
@@ -474,18 +544,20 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 {
 	struct udevice *bus = dev->parent;
 	struct dw_spi_priv *priv = dev_get_priv(bus);
-	const u8 *tx = dout;
+	const void *tx = dout;
 	u8 *rx = din;
 	int ret = 0;
 	u32 cr0 = 0;
-	u32 val;
-	u32 cs;
+	u32 val, cs;
+	uint frames;
 
 	/* spi core configured to do 8 bit transfers */
-	if (bitlen % 8) {
+	if (bitlen % priv->bits_per_word) {
 		dev_err(dev, "Non byte aligned SPI transfer.\n");
 		return -1;
 	}
+
+	frames = bitlen / priv->bits_per_word;
 
 	/* Start the transaction if necessary. */
 	if (flags & SPI_XFER_BEGIN)
@@ -496,29 +568,21 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	else if (rx)
 		priv->tmode = CTRLR0_TMOD_RO;
 	else
-		/*
-		 * In transmit only mode (CTRL0_TMOD_TO) input FIFO never gets
-		 * any data which breaks our logic in poll_transfer() above.
-		 */
-		priv->tmode = CTRLR0_TMOD_TR;
+		priv->tmode = CTRLR0_TMOD_TO;
 
 	cr0 = dw_spi_update_cr0(priv);
-
-	priv->len = bitlen >> 3;
-
-	priv->tx = (void *)tx;
-	priv->tx_end = priv->tx + priv->len;
-	priv->rx = rx;
-	priv->rx_end = priv->rx + priv->len;
 
 	/* Disable controller before writing control registers */
 	dw_write(priv, DW_SPI_SSIENR, 0);
 
-	dev_dbg(dev, "cr0=%08x rx=%p tx=%p len=%d [bytes]\n", cr0, rx, tx,
-		priv->len);
+	dev_dbg(dev, "cr0=%08x rx=%p tx=%p frames=%d\n", cr0, rx, tx,
+		frames);
 	/* Reprogram cr0 only if changed */
 	if (dw_read(priv, DW_SPI_CTRLR0) != cr0)
 		dw_write(priv, DW_SPI_CTRLR0, cr0);
+
+	if (rx)
+		dw_write(priv, DW_SPI_CTRLR1, frames - 1);
 
 	/*
 	 * Configure the desired SS (slave select 0...3) in the controller
@@ -531,8 +595,15 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	/* Enable controller after writing control registers */
 	dw_write(priv, DW_SPI_SSIENR, 1);
 
+	/*
+	 * Prime the pump. RO-mode doesn't work unless something gets written to
+	 * the FIFO
+	 */
+	if (rx && !tx)
+		dw_write(priv, DW_SPI_DR, 0xFFFFFFFF);
+
 	/* Start transfer in a polling loop */
-	ret = poll_transfer(priv);
+	poll_transfer(priv, tx, rx, frames);
 
 	/*
 	 * Wait for current transmit operation to complete.
@@ -565,9 +636,10 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	int pos, i, ret = 0;
 	struct udevice *bus = slave->dev->parent;
 	struct dw_spi_priv *priv = dev_get_priv(bus);
+	struct spi_mem_op *mut_op = (struct spi_mem_op *)op;
 	u8 op_len = sizeof(op->cmd.opcode) + op->addr.nbytes + op->dummy.nbytes;
 	u8 op_buf[op_len];
-	u32 cr0;
+	u32 cr0, val;
 
 	if (read)
 		priv->tmode = CTRLR0_TMOD_EPROMREAD;
@@ -597,47 +669,33 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	if (op->dummy.nbytes)
 		memset(op_buf + pos, 0xff, op->dummy.nbytes);
 
-	external_cs_manage(slave->dev, false);
+	dw_writer(priv, &op_buf, 0, op_len, 0, sizeof(u8));
 
-	priv->tx = &op_buf;
-	priv->tx_end = priv->tx + op_len;
-	priv->rx = NULL;
-	priv->rx_end = NULL;
-	while (priv->tx != priv->tx_end)
-		dw_writer(priv);
+	external_cs_manage(slave->dev, false);
+	dw_write(priv, DW_SPI_SER, 1 << spi_chip_select(slave->dev));
 
 	/*
 	 * XXX: The following are tight loops! Enabling debug messages may cause
 	 * them to fail because we are not reading/writing the fifo fast enough.
 	 */
-	if (read) {
-		priv->rx = op->data.buf.in;
-		priv->rx_end = priv->rx + op->data.nbytes;
+	if (read)
+		mut_op->data.nbytes = poll_transfer(priv, NULL, op->data.buf.in,
+						    op->data.nbytes);
+	else
+		mut_op->data.nbytes = poll_transfer(priv, op->data.buf.out,
+						    NULL, op->data.nbytes);
 
-		dw_write(priv, DW_SPI_SER, 1 << spi_chip_select(slave->dev));
-		while (priv->rx != priv->rx_end)
-			dw_reader(priv);
-	} else {
-		u32 val;
-
-		priv->tx = op->data.buf.out;
-		priv->tx_end = priv->tx + op->data.nbytes;
-
-		/* Fill up the write fifo before starting the transfer */
-		dw_writer(priv);
-		dw_write(priv, DW_SPI_SER, 1 << spi_chip_select(slave->dev));
-		while (priv->tx != priv->tx_end)
-			dw_writer(priv);
-
-		if (readl_poll_timeout(priv->regs + DW_SPI_SR, val,
-				       (val & SR_TF_EMPT) && !(val & SR_BUSY),
-				       RX_TIMEOUT * 1000)) {
-			dev_dbg(bus, "timed out; sr=%x\n",
-				dw_read(priv, DW_SPI_SR));
-			ret = -ETIMEDOUT;
-		}
+	/*
+	 * Ensure the data (or the instruction for zero-data instructions) has
+	 * been transmitted from the fifo/shift register before disabling the
+	 * device.
+	 */
+	if (readl_poll_timeout(priv->regs + DW_SPI_SR, val,
+			       (val & SR_TF_EMPT) && !(val & SR_BUSY),
+			       RX_TIMEOUT * 1000)) {
+		dev_dbg(bus, "timed out; sr=%x\n", dw_read(priv, DW_SPI_SR));
+		ret = -ETIMEDOUT;
 	}
-
 	dw_write(priv, DW_SPI_SER, 0);
 	external_cs_manage(slave->dev, true);
 

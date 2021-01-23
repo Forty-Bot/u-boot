@@ -56,6 +56,8 @@
 #define DW_SPI_IDR			0x58
 #define DW_SPI_VERSION			0x5c
 #define DW_SPI_DR			0x60
+#define DW_SPI_RX_SAMPLE_DLY		0xf0
+#define DW_SPI_SPI_CTRL0		0xf4
 
 /* Bit fields in CTRLR0 */
 /*
@@ -80,8 +82,8 @@
 #define CTRLR0_TMOD_RO			0x2		/* recv only */
 #define CTRLR0_TMOD_EPROMREAD		0x3		/* eeprom read mode */
 
-#define CTRLR0_SLVOE_OFFSET		10
-#define CTRLR0_SRL_OFFSET		11
+#define CTRLR0_SLVOE_OFFSET		BIT(10)
+#define CTRLR0_SRL			BIT(11)
 #define CTRLR0_CFS_MASK			GENMASK(15, 12)
 
 /* Only present when SSI_MAX_XFER_SIZE=32 */
@@ -92,13 +94,15 @@
 #define CTRLR0_SPI_FRF_BYTE		0x0
 #define	CTRLR0_SPI_FRF_DUAL		0x1
 #define	CTRLR0_SPI_FRF_QUAD		0x2
+#define	CTRLR0_SPI_FRF_OCTAL		0x3
 
 /* Bit fields in CTRLR0 based on DWC_ssi_databook.pdf v1.01a */
 #define DWC_SSI_CTRLR0_DFS_MASK		GENMASK(4, 0)
 #define DWC_SSI_CTRLR0_FRF_MASK		GENMASK(7, 6)
 #define DWC_SSI_CTRLR0_MODE_MASK	GENMASK(9, 8)
 #define DWC_SSI_CTRLR0_TMOD_MASK	GENMASK(11, 10)
-#define DWC_SSI_CTRLR0_SRL_OFFSET	13
+#define DWC_SSI_CTRLR0_SRL		BIT(13)
+#define DWC_SSI_CTRLR0_SSTE		BIT(14)
 #define DWC_SSI_CTRLR0_SPI_FRF_MASK	GENMASK(23, 22)
 
 /* Bit fields in SR, 7 bits */
@@ -110,6 +114,56 @@
 #define SR_RF_FULL			BIT(4)
 #define SR_TX_ERR			BIT(5)
 #define SR_DCOL				BIT(6)
+
+/* Bit fields in (R)ISR */
+
+/* TX FIFO Empty */
+#define ISR_TXEI			BIT(0)
+/* TX FIFO Overflow */
+#define ISR_TXOI			BIT(1)
+/* RX FIFO Underflow */
+#define ISR_RXUI			BIT(2)
+/* RX FIFO Overflow */
+#define ISR_RXOI			BIT(3)
+/* RX FIFO Full */
+#define ISR_RXFI			BIT(4)
+/* Multi-master contention */
+#define ISR_MSTI			BIT(5)
+/* XIP Receive FIFO Overflow */
+#define ISR_XRXOI			BIT(6)
+/* TX FIFO Underflow */
+#define ISR_TXUI			BIT(7)
+/* AXI Error */
+#define ISR_AXIE			BIT(8)
+/* SPI TX Error */
+#define ISR_SPITE			BIT(10)
+/* SSI Done */
+#define ISR_DONE			BIT(11)
+
+/* Bit fields in SPI_CTRLR0 */
+
+/*
+ * Whether the instruction or address use the value of SPI_FRF or use
+ * FRF_BYTE
+ */
+#define SPI_CTRLR0_TRANS_TYPE_MASK	GENMASK(1, 0)
+#define SPI_CTRLR0_TRANS_TYPE_1_1_X	0x0
+#define SPI_CTRLR0_TRANS_TYPE_1_X_X	0x1
+#define SPI_CTRLR0_TRANS_TYPE_X_X_X	0x2
+/* Address length in 4-bit units */
+#define SPI_CTRLR0_ADDR_L_MASK		GENMASK(5, 2)
+/* Enable mode bits after address in XIP mode */
+#define SPI_CTRLR0_XIP_MD_BIT_EN	BIT(7)
+/* Instruction length */
+#define SPI_CTRLR0_INST_L_MASK		GENMASK(9, 8)
+#define INST_L_0			0x0
+#define INST_L_4			0x1
+#define INST_L_8			0x2
+#define INST_L_16			0x3
+/* Number of "dummy" cycles */
+#define SPI_CTRLR0_WAIT_CYCLES_MASK	GENMASK(15, 11)
+/* Stretch the clock if the FIFO over/underflows */
+#define SPI_CTRLR0_CLK_STRETCH_EN	BIT(30)
 
 #define RX_TIMEOUT			1000		/* timeout in ms */
 

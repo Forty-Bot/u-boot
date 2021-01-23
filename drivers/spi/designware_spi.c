@@ -129,6 +129,7 @@ struct dw_spi_priv {
 #define DW_SPI_CAP_KEEMBAY_MST		BIT(1) /* Unimplemented */
 #define DW_SPI_CAP_DWC_SSI		BIT(2)
 #define DW_SPI_CAP_DFS32		BIT(3)
+#define DW_SPI_CAP_ENHANCED		BIT(4)
 	unsigned long caps;
 	unsigned long bus_clk_rate;
 	unsigned int freq;		/* Default frequency */
@@ -141,6 +142,7 @@ struct dw_spi_priv {
 	u8 cs;				/* chip select pin */
 	u8 tmode;			/* TR/TO/RO/EEPROM */
 	u8 type;			/* SPI/SSP/MicroWire */
+	u8 spi_frf;			/* BYTE/DUAL/QUAD/OCTAL */
 };
 
 static inline u32 dw_read(struct dw_spi_priv *priv, u32 offset)
@@ -248,6 +250,18 @@ static void spi_hw_init(struct udevice *bus, struct dw_spi_priv *priv)
 	 */
 	if (priv->caps & DW_SPI_CAP_DWC_SSI || !FIELD_GET(CTRLR0_DFS_MASK, cr0))
 		priv->caps |= DW_SPI_CAP_DFS32;
+
+	/*
+	 * If SPI_FRF exists that means we have DUAL, QUAD, or OCTAL. Since we
+	 * can't differentiate, just set a general ENHANCED cap and let the
+	 * slave decide what to use.
+	 */
+	if (priv->caps & DW_SPI_CAP_DWC_SSI) {
+		if (FIELD_GET(DWC_SSI_CTRLR0_SPI_FRF_MASK, cr0))
+			priv->caps |= DW_SPI_CAP_ENHANCED;
+	} else if (FIELD_GET(CTRLR0_SPI_FRF_MASK, cr0)) {
+		priv->caps |= DW_SPI_CAP_ENHANCED;
+	}
 
 	dw_write(priv, DW_SPI_SSIENR, 1);
 
@@ -746,13 +760,19 @@ static int dw_spi_set_mode(struct udevice *bus, uint mode)
 {
 	struct dw_spi_priv *priv = dev_get_priv(bus);
 
+	if (!(priv->caps & DW_SPI_CAP_ENHANCED) &&
+	    (mode & (SPI_RX_DUAL | SPI_TX_DUAL |
+		     SPI_RX_QUAD | SPI_TX_QUAD |
+		     SPI_RX_OCTAL | SPI_TX_OCTAL)))
+		return -EINVAL;
+
 	/*
 	 * Can't set mode yet. Since this depends on if rx, tx, or
 	 * rx & tx is requested. So we have to defer this to the
 	 * real transfer function.
 	 */
 	priv->mode = mode;
-	dev_dbg(bus, "mode=%d\n", priv->mode);
+	dev_dbg(bus, "mode=%x\n", mode);
 
 	return 0;
 }

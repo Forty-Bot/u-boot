@@ -220,6 +220,13 @@ int spi_mem_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	int ret;
 	int i;
 
+	dev_dbg(slave->dev,
+		"exec %02Xh %u-%u-%u addr=%llx dummy cycles=%u data bytes=%u\n",
+		op->cmd.opcode, op->cmd.buswidth, op->addr.buswidth,
+		op->data.buswidth, op->addr.val,
+		op->dummy.buswidth ? op->dummy.nbytes * 8 / op->dummy.buswidth : 0,
+		op->data.nbytes);
+
 	if (!spi_mem_supports_op(slave, op))
 		return -ENOTSUPP;
 

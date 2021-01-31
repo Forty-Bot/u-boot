@@ -258,6 +258,7 @@ static u32 dw_spi_update_spi_cr0(const struct spi_mem_op *op)
 	       | FIELD_PREP(SPI_CTRLR0_ADDR_L_MASK, op->addr.nbytes * 2)
 	       | FIELD_PREP(SPI_CTRLR0_INST_L_MASK, INST_L_8)
 	       | FIELD_PREP(SPI_CTRLR0_WAIT_CYCLES_MASK, wait_cycles)
+	       | SPI_CTRLR0_CLK_STRETCH_EN;
 }
 
 static int request_gpio_cs(struct udevice *bus)
@@ -360,6 +361,9 @@ static void spi_hw_init(struct udevice *bus, struct dw_spi_priv *priv)
 		priv->fifo_len = (fifo == 1) ? 0 : fifo;
 		dw_write(priv, DW_SPI_TXFTLR, 0);
 	}
+
+	/* Set receive fifo interrupt level register for clock stretching */
+	dw_write(priv, DW_SPI_RXFTLR, priv->fifo_len - 1);
 }
 
 /*
@@ -782,8 +786,7 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 
 	dw_write(priv, DW_SPI_SSIENR, 0);
 	dw_write(priv, DW_SPI_CTRLR0, cr0);
-	if (read)
-		dw_write(priv, DW_SPI_CTRLR1, op->data.nbytes - 1);
+	dw_write(priv, DW_SPI_CTRLR1, op->data.nbytes - 1);
 	if (priv->spi_frf != CTRLR0_SPI_FRF_BYTE)
 		dw_write(priv, DW_SPI_SPI_CTRL0, spi_cr0);
 	dw_write(priv, DW_SPI_SSIENR, 1);

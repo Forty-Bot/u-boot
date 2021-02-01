@@ -202,6 +202,7 @@
 struct dw_spi_plat {
 	s32 frequency;		/* Default clock frequency, -1 for none */
 	void __iomem *regs;
+	fdt_size_t regs_size;
 };
 
 struct dw_spi_priv {
@@ -210,12 +211,15 @@ struct dw_spi_priv {
 	struct gpio_desc cs_gpio;	/* External chip-select gpio */
 
 	void __iomem *regs;
+	fdt_size_t regs_size;
 /* DW SPI capabilities */
 #define DW_SPI_CAP_CS_OVERRIDE		BIT(0) /* Unimplemented */
 #define DW_SPI_CAP_KEEMBAY_MST		BIT(1) /* Unimplemented */
 #define DW_SPI_CAP_DWC_SSI		BIT(2)
 #define DW_SPI_CAP_DFS32		BIT(3)
 #define DW_SPI_CAP_ENHANCED		BIT(4)
+#define DW_SPI_CAP_XIP			BIT(5)
+#define DW_SPI_CAP_XIP_CONCURRENT	BIT(6)
 	unsigned long caps;
 	unsigned long bus_clk_rate;
 	unsigned int freq;		/* Default frequency */
@@ -322,11 +326,13 @@ static int request_gpio_cs(struct udevice *bus)
 
 static int dw_spi_of_to_plat(struct udevice *bus)
 {
+	fdt_addr_t regs;
 	struct dw_spi_plat *plat = dev_get_plat(bus);
 
-	plat->regs = dev_read_addr_ptr(bus);
-	if (!plat->regs)
+	regs = dev_read_addr_size_index(bus, 0, &plat->regs_size);
+	if (regs == FDT_ADDR_T_NONE)
 		return -EINVAL;
+	plat->regs = (void *)regs;
 
 	/* Use 500KHz as a suitable default */
 	plat->frequency = dev_read_u32_default(bus, "spi-max-frequency",
@@ -374,6 +380,19 @@ static void spi_hw_init(struct udevice *bus, struct dw_spi_priv *priv)
 	} else if (FIELD_GET(CTRLR0_SPI_FRF_MASK, cr0)) {
 		priv->caps |= DW_SPI_CAP_ENHANCED;
 	}
+
+	/*
+	 * DWC_SPI always has this register with SSIC_XIP_EN. There is no way
+	 * to detect XIP for DW APB SSI
+	 */
+	dw_write(priv, DW_SPI_XIP_INCR_INST, 0xffffffff);
+	if (dw_read(priv, DW_SPI_XIP_INCR_INST))
+		priv->caps |= DW_SPI_CAP_XIP;
+
+	/* Exists with SSIC_CONCURRENT_XIP_EN */
+	dw_write(priv, DW_SPI_XIP_CTRL, 0xffffffff);
+	if (dw_read(priv, DW_SPI_XIP_CTRL))
+		priv->caps |= DW_SPI_CAP_XIP_CONCURRENT;
 
 	dw_write(priv, DW_SPI_SSIENR, 1);
 
@@ -469,6 +488,7 @@ static int dw_spi_probe(struct udevice *bus)
 	u32 version;
 
 	priv->regs = plat->regs;
+	priv->regs_size = plat->regs_size;
 	priv->freq = plat->frequency;
 
 	ret = dw_spi_get_clk(bus, &priv->bus_clk_rate);
@@ -1022,7 +1042,10 @@ static const struct udevice_id dw_spi_ids[] = {
 	 */
 	{ .compatible = "altr,socfpga-spi" },
 	{ .compatible = "altr,socfpga-arria10-spi" },
-	{ .compatible = "canaan,kendryte-k210-spi" },
+	{
+		.compatible = "canaan,kendryte-k210-spi",
+		.data = DW_SPI_CAP_XIP,
+	},
 	{
 		.compatible = "canaan,kendryte-k210-ssi",
 		.data = DW_SPI_CAP_DWC_SSI,

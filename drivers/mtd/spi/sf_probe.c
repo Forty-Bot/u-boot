@@ -14,8 +14,71 @@
 #include <malloc.h>
 #include <spi.h>
 #include <spi_flash.h>
+#include <spi-mem.h>
 
 #include "sf_internal.h"
+
+#if CONFIG_IS_ENABLED(SPI_DIRMAP)
+static int spi_nor_create_read_dirmap(struct spi_nor *nor)
+{
+	struct spi_mem_dirmap_info info = {
+		.op_tmpl = SPI_MEM_OP(SPI_MEM_OP_CMD(nor->read_opcode, 1),
+				      SPI_MEM_OP_ADDR(nor->addr_width, 0, 1),
+				      SPI_MEM_OP_DUMMY(nor->read_dummy, 1),
+				      SPI_MEM_OP_DATA_IN(0, NULL, 1)),
+		.offset = 0,
+		.length = nor->mtd.size,
+	};
+	struct spi_mem_op *op = &info.op_tmpl;
+
+	/* get transfer protocols. */
+	op->cmd.buswidth = spi_nor_get_protocol_inst_nbits(nor->read_proto);
+	op->addr.buswidth = spi_nor_get_protocol_addr_nbits(nor->read_proto);
+	op->dummy.buswidth = op->addr.buswidth;
+	op->data.buswidth = spi_nor_get_protocol_data_nbits(nor->read_proto);
+
+	/* convert the dummy cycles to the number of bytes */
+	op->dummy.nbytes = (nor->read_dummy * op->dummy.buswidth) / 8;
+
+	nor->dirmap.rdesc = spi_mem_dirmap_create(nor->spi, &info);
+	return PTR_ERR_OR_ZERO(nor->dirmap.rdesc);
+}
+
+static int spi_nor_create_write_dirmap(struct spi_nor *nor)
+{
+	struct spi_mem_dirmap_info info = {
+		.op_tmpl = SPI_MEM_OP(SPI_MEM_OP_CMD(nor->program_opcode, 1),
+				      SPI_MEM_OP_ADDR(nor->addr_width, 0, 1),
+				      SPI_MEM_OP_NO_DUMMY,
+				      SPI_MEM_OP_DATA_OUT(0, NULL, 1)),
+		.offset = 0,
+		.length = nor->mtd.size,
+	};
+	struct spi_mem_op *op = &info.op_tmpl;
+
+	/* get transfer protocols. */
+	op->cmd.buswidth = spi_nor_get_protocol_inst_nbits(nor->write_proto);
+	op->addr.buswidth = spi_nor_get_protocol_addr_nbits(nor->write_proto);
+	op->dummy.buswidth = op->addr.buswidth;
+	op->data.buswidth = spi_nor_get_protocol_data_nbits(nor->write_proto);
+
+	if (nor->program_opcode == SPINOR_OP_AAI_WP && nor->sst_write_second)
+		op->addr.nbytes = 0;
+
+	nor->dirmap.wdesc = spi_mem_dirmap_create(nor->spi, &info);
+	return PTR_ERR_OR_ZERO(nor->dirmap.wdesc);
+}
+#else
+static int spi_nor_create_read_dirmap(struct spi_nor *nor)
+{
+	return 0;
+}
+
+static int spi_nor_create_write_dirmap(struct spi_nor *nor)
+{
+	return 0;
+}
+#endif /* CONFIG_SPI_DIRMAP */
 
 /**
  * spi_flash_probe_slave() - Probe for a SPI flash device on a bus
@@ -44,6 +107,14 @@ static int spi_flash_probe_slave(struct spi_flash *flash)
 	ret = spi_nor_scan(flash);
 	if (ret)
 		goto err_read_id;
+
+	ret = spi_nor_create_read_dirmap(flash);
+	if (ret)
+		return ret;
+
+	ret = spi_nor_create_write_dirmap(flash);
+	if (ret)
+		return ret;
 
 	if (CONFIG_IS_ENABLED(SPI_FLASH_MTD))
 		ret = spi_flash_mtd_register(flash);
@@ -83,6 +154,9 @@ struct spi_flash *spi_flash_probe(unsigned int busnum, unsigned int cs,
 
 void spi_flash_free(struct spi_flash *flash)
 {
+	spi_mem_dirmap_destroy(flash->dirmap.wdesc);
+	spi_mem_dirmap_destroy(flash->dirmap.rdesc);
+
 	if (CONFIG_IS_ENABLED(SPI_FLASH_MTD))
 		spi_flash_mtd_unregister();
 
@@ -143,6 +217,11 @@ int spi_flash_std_probe(struct udevice *dev)
 
 static int spi_flash_std_remove(struct udevice *dev)
 {
+	struct spi_flash *flash = dev_get_uclass_priv(dev);
+
+	spi_mem_dirmap_destroy(flash->dirmap.wdesc);
+	spi_mem_dirmap_destroy(flash->dirmap.rdesc);
+
 	if (CONFIG_IS_ENABLED(SPI_FLASH_MTD))
 		spi_flash_mtd_unregister();
 

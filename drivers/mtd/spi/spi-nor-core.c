@@ -96,13 +96,23 @@ static ssize_t spi_nor_read_data(struct spi_nor *nor, loff_t from, size_t len,
 
 	while (remaining) {
 		op.data.nbytes = remaining < UINT_MAX ? remaining : UINT_MAX;
-		ret = spi_mem_adjust_op_size(nor->spi, &op);
-		if (ret)
-			return ret;
 
-		ret = spi_mem_exec_op(nor->spi, &op);
-		if (ret)
-			return ret;
+		if (CONFIG_IS_ENABLED(SPI_DIRMAP) && nor->dirmap.rdesc) {
+			ret = spi_mem_dirmap_read(nor->dirmap.rdesc,
+						  op.addr.val, op.data.nbytes,
+						  op.data.buf.in);
+			if (ret < 0)
+				return ret;
+			op.data.nbytes = ret;
+		} else {
+			ret = spi_mem_adjust_op_size(nor->spi, &op);
+			if (ret)
+				return ret;
+
+			ret = spi_mem_exec_op(nor->spi, &op);
+			if (ret)
+				return ret;
+		}
 
 		op.addr.val += op.data.nbytes;
 		remaining -= op.data.nbytes;
@@ -120,6 +130,7 @@ static ssize_t spi_nor_write_data(struct spi_nor *nor, loff_t to, size_t len,
 				   SPI_MEM_OP_ADDR(nor->addr_width, to, 1),
 				   SPI_MEM_OP_NO_DUMMY,
 				   SPI_MEM_OP_DATA_OUT(len, buf, 1));
+	ssize_t nbytes;
 	int ret;
 
 	/* get transfer protocols. */
@@ -130,16 +141,22 @@ static ssize_t spi_nor_write_data(struct spi_nor *nor, loff_t to, size_t len,
 	if (nor->program_opcode == SPINOR_OP_AAI_WP && nor->sst_write_second)
 		op.addr.nbytes = 0;
 
-	ret = spi_mem_adjust_op_size(nor->spi, &op);
-	if (ret)
-		return ret;
-	op.data.nbytes = len < op.data.nbytes ? len : op.data.nbytes;
+	if (CONFIG_IS_ENABLED(SPI_DIRMAP) && nor->dirmap.wdesc) {
+		nbytes = spi_mem_dirmap_write(nor->dirmap.wdesc, op.addr.val,
+					      op.data.nbytes, op.data.buf.out);
+	} else {
+		ret = spi_mem_adjust_op_size(nor->spi, &op);
+		if (ret)
+			return ret;
+		op.data.nbytes = len < op.data.nbytes ? len : op.data.nbytes;
 
-	ret = spi_mem_exec_op(nor->spi, &op);
-	if (ret)
-		return ret;
+		ret = spi_mem_exec_op(nor->spi, &op);
+		if (ret)
+			return ret;
+		nbytes = op.data.nbytes;
+	}
 
-	return op.data.nbytes;
+	return nbytes;
 }
 
 /*

@@ -304,6 +304,7 @@ struct spi_flash {
  * @flash_is_locked:	[FLASH-SPECIFIC] check if a region of the SPI NOR is
  *			completely locked
  * @quad_enable:	[FLASH-SPECIFIC] enables SPI NOR quad mode
+ * @dirmap:             pointers to struct spi_mem_dirmap_desc for reads/writes.
  * @priv:		the private data
  */
 struct spi_nor {
@@ -345,6 +346,11 @@ struct spi_nor {
 	int (*flash_unlock)(struct spi_nor *nor, loff_t ofs, uint64_t len);
 	int (*flash_is_locked)(struct spi_nor *nor, loff_t ofs, uint64_t len);
 	int (*quad_enable)(struct spi_nor *nor);
+
+	struct {
+		struct spi_mem_dirmap_desc *rdesc;
+		struct spi_mem_dirmap_desc *wdesc;
+	} dirmap;
 
 	void *priv;
 /* Compatibility for spi_flash, remove once sf layer is merged with mtd */

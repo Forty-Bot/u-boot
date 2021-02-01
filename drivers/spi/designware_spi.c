@@ -58,6 +58,13 @@
 #define DW_SPI_DR			0x60
 #define DW_SPI_RX_SAMPLE_DLY		0xf0
 #define DW_SPI_SPI_CTRL0		0xf4
+#define DW_SPI_XIP_MODE_BITS		0xfc
+#define DW_SPI_XIP_INCR_INST		0x100
+#define DW_SPI_XIP_WRAP_INST		0x104
+#define DW_SPI_XIP_CTRL			0x108
+#define DW_SPI_XIP_SER			0x10c
+#define DW_SPI_XRXOICR			0x110
+#define DW_SPI_XIP_XNT_TIME_OUT		0x114
 
 /* Bit fields in CTRLR0 */
 /*
@@ -147,9 +154,9 @@
  * FRF_BYTE
  */
 #define SPI_CTRLR0_TRANS_TYPE_MASK	GENMASK(1, 0)
-#define SPI_CTRLR0_TRANS_TYPE_1_1_X	0x0
-#define SPI_CTRLR0_TRANS_TYPE_1_X_X	0x1
-#define SPI_CTRLR0_TRANS_TYPE_X_X_X	0x2
+#define TRANS_TYPE_1_1_X		0x0
+#define TRANS_TYPE_1_X_X		0x1
+#define TRANS_TYPE_X_X_X		0x2
 /* Address length in 4-bit units */
 #define SPI_CTRLR0_ADDR_L_MASK		GENMASK(5, 2)
 /* Enable mode bits after address in XIP mode */
@@ -164,6 +171,31 @@
 #define SPI_CTRLR0_WAIT_CYCLES_MASK	GENMASK(15, 11)
 /* Stretch the clock if the FIFO over/underflows */
 #define SPI_CTRLR0_CLK_STRETCH_EN	BIT(30)
+
+/* Bit fields in XIP_CTRL */
+
+/* XIP SPI frame format */
+#define XIP_CTRL_FRF			GENMASK(1, 0)
+/* Same as SPI_CTRLR0_TRANS_TYPE */
+#define XIP_CTRL_TRANS_TYPE_MASK	GENMASK(3, 2)
+/* Address length in 4-bit increments */
+#define XIP_CTRL_ADDR_L_MASK		GENMASK(7, 4)
+/* Same as SPI_CTRLR0_INST_L */
+#define XIP_CTRL_INST_L_MASK		GENMASK(10, 9)
+/* Enable mode bits */
+#define XIP_CTRL_MD_BITS_EN		BIT(12)
+/* Wait cycles */
+#define XIP_CTRL_WAIT_CYCLES_MASK	GENMASK(17, 13)
+/* Use fixed-size DFS in XIP mode, ignoring AHB request width */
+#define XIP_CTRL_DFS_HC			BIT(18)
+/* Enable instruction phase */
+#define XIP_CTRL_INST_EN		BIT(22)
+/* Continuous transfer: don't deselect slave after one transfer */
+#define XIP_CTRL_CONT_XFER_EN		BIT(23)
+/* Mode bits length; length = 1 << (MBL + 1) */
+#define XIP_CTRL_XIP_MBL_MASK		GENMASK(27, 26)
+/* Prefetch contiguous data frames */
+#define XIP_CTRL_PREFETCH_EN		BIT(29)
 
 #define RX_TIMEOUT			1000		/* timeout in ms */
 
@@ -243,11 +275,11 @@ static u32 dw_spi_update_spi_cr0(const struct spi_mem_op *op)
 
 	/* This assumes support_op has filtered invalid types */
 	if (op->addr.buswidth == 1)
-		trans_type = SPI_CTRLR0_TRANS_TYPE_1_1_X;
+		trans_type = TRANS_TYPE_1_1_X;
 	else if (op->cmd.buswidth == 1)
-		trans_type = SPI_CTRLR0_TRANS_TYPE_1_X_X;
+		trans_type = TRANS_TYPE_1_X_X;
 	else
-		trans_type = SPI_CTRLR0_TRANS_TYPE_X_X_X;
+		trans_type = TRANS_TYPE_X_X_X;
 
 	if (op->dummy.buswidth)
 		wait_cycles = op->dummy.nbytes * 8 / op->dummy.buswidth;

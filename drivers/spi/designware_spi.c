@@ -552,6 +552,7 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	if (readl_poll_timeout(priv->regs + DW_SPI_SR, val,
 			       (val & SR_TF_EMPT) && !(val & SR_BUSY),
 			       RX_TIMEOUT * 1000)) {
+		dev_dbg(bus, "timed out; sr=%x\n", dw_read(priv, DW_SPI_SR));
 		ret = -ETIMEDOUT;
 	}
 
@@ -639,6 +640,8 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 		if (readl_poll_timeout(priv->regs + DW_SPI_SR, val,
 				       (val & SR_TF_EMPT) && !(val & SR_BUSY),
 				       RX_TIMEOUT * 1000)) {
+			dev_dbg(bus, "timed out; sr=%x\n",
+				dw_read(priv, DW_SPI_SR));
 			ret = -ETIMEDOUT;
 		}
 	}

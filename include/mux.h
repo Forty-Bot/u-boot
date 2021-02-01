@@ -135,6 +135,12 @@ static inline int mux_control_deselect(struct mux_control *mux)
 	return -ENOSYS;
 }
 
+static inline int mux_get_by_index(struct udevice *dev, int index,
+				   struct mux_control **mux)
+{
+	return -ENOSYS;
+}
+
 static inline struct mux_control *mux_control_get(struct udevice *dev,
 						  const char *mux_name)
 {

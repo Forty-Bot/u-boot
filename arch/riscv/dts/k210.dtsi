@@ -600,6 +600,8 @@
 				interrupts = <4>;
 				clocks = <&sysclk K210_CLK_SPI3>;
 				clock-names = "ssi_clk";
+				assigned-clocks = <&sysclk K210_CLK_SPI3>;
+				assigned-clock-rates = <390000000>;
 				resets = <&sysrst K210_RST_SPI3>;
 				/* Could possibly go up to 200 MHz */
 				spi-max-frequency = <100000000>;

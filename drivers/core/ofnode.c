@@ -220,9 +220,18 @@ int ofnode_read_u32_array(ofnode node, const char *propname,
 		return of_read_u32_array(ofnode_to_np(node), propname,
 					 out_values, sz);
 	} else {
-		return fdtdec_get_int_array(gd->fdt_blob,
-					    ofnode_to_offset(node), propname,
-					    out_values, sz);
+		int err = fdtdec_get_int_array(gd->fdt_blob,
+					       ofnode_to_offset(node), propname,
+					       out_values, sz);
+
+		switch (err) {
+		case FDT_ERR_NOTFOUND:
+			return -EINVAL;
+		case FDT_ERR_BADLAYOUT:
+			return -EOVERFLOW;
+		default:
+			return 0;
+		}
 	}
 }
 

@@ -292,6 +292,8 @@
 				interrupts = <2>;
 				clocks = <&sysclk K210_CLK_SPI2>;
 				resets = <&sysrst K210_RST_SPI2>;
+				mux-controls = <&xip_mux 2>;
+				mux-xip-state = <1>;
 				spi-max-frequency = <25000000>;
 				status = "disabled";
 			};
@@ -530,6 +532,15 @@
 					mask = <1>;
 					value = <1>;
 				};
+
+				xip_mux: mux-controller {
+					compatible = "mmio-mux";
+					#mux-control-cells = <1>;
+					mux-reg-masks = <K210_SYSCTL_PERI (1 << 12)>,
+							<K210_SYSCTL_PERI (1 << 13)>,
+							<K210_SYSCTL_PERI (1 << 14)>,
+							<K210_SYSCTL_PERI (1 << 15)>;
+				};
 			};
 
 			aes0: aes@50450000 {
@@ -563,11 +574,13 @@
 				compatible = "canaan,kendryte-k210-spi",
 					     "snps,dw-apb-ssi-4.01",
 					     "snps,dw-apb-ssi";
-				reg = <0x52000000 0x100>;
+				reg = <0x52000000 0x1000000>;
 				interrupts = <1>;
 				clocks = <&sysclk K210_CLK_SPI0>;
 				clock-names = "ssi_clk";
 				resets = <&sysrst K210_RST_SPI0>;
+				mux-controls = <&xip_mux 0>;
+				mux-xip-state = <1>;
 				spi-max-frequency = <25000000>;
 				num-cs = <4>;
 				reg-io-width = <4>;
@@ -580,11 +593,13 @@
 				compatible = "canaan,kendryte-k210-spi",
 					     "snps,dw-apb-ssi-4.01",
 					     "snps,dw-apb-ssi";
-				reg = <0x53000000 0x100>;
+				reg = <0x53000000 0x1000000>;
 				interrupts = <2>;
 				clocks = <&sysclk K210_CLK_SPI1>;
 				clock-names = "ssi_clk";
 				resets = <&sysrst K210_RST_SPI1>;
+				mux-controls = <&xip_mux 1>;
+				mux-xip-state = <1>;
 				spi-max-frequency = <25000000>;
 				num-cs = <4>;
 				reg-io-width = <4>;
@@ -596,13 +611,15 @@
 				#size-cells = <0>;
 				compatible = "canaan,kendryte-k210-ssi",
 					     "snps,dwc-ssi-1.01a";
-				reg = <0x54000000 0x200>;
+				reg = <0x54000000 0x1000000>;
 				interrupts = <4>;
 				clocks = <&sysclk K210_CLK_SPI3>;
 				clock-names = "ssi_clk";
 				assigned-clocks = <&sysclk K210_CLK_SPI3>;
 				assigned-clock-rates = <390000000>;
 				resets = <&sysrst K210_RST_SPI3>;
+				mux-controls = <&xip_mux 3>;
+				mux-xip-state = <1>;
 				/* Could possibly go up to 200 MHz */
 				spi-max-frequency = <100000000>;
 				num-cs = <4>;

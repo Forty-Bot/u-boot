@@ -1056,10 +1056,141 @@ static int dw_spi_adjust_op_size(struct spi_slave *slave, struct spi_mem_op *op)
 	return 0;
 }
 
+#if CONFIG_IS_ENABLED(SPI_DIRMAP)
+static int dw_spi_dirmap_create(struct spi_mem_dirmap_desc *desc)
+{
+	struct dw_spi_priv *priv = dev_get_priv(desc->slave->dev->parent);
+
+	/*
+	 * Currently only DWC XIP is supported. DW APB SSI XIP exists, but
+	 * cannot send an instruction before the address, so it is left for when
+	 * U-Boot supports 0-X-X instructions. In addition, we only support
+	 * concurrent XIP (since I have no non-condcurrent XIP hardware to test
+	 * with)
+	 */
+	if (!(priv->caps & (DW_SPI_CAP_XIP)) ||
+	    !(priv->caps & (DW_SPI_CAP_DWC_SSI)) ||
+	    !(priv->caps & (DW_SPI_CAP_XIP_CONCURRENT)))
+		return -ENOTSUPP;
+
+	if (!spi_mem_supports_op(desc->slave, &desc->info.op_tmpl))
+		return -ENOTSUPP;
+
+	/*
+	 * Make sure the requested region doesn't go out of the physically
+	 * mapped flash memory bounds and the operation is read-only.
+	 */
+	if (desc->info.offset + desc->info.length > priv->regs_size ||
+	    desc->info.op_tmpl.data.dir != SPI_MEM_DATA_IN)
+		return -ENOTSUPP;
+
+	/* XIP only supports enhanced SPI modes */
+	if (desc->info.op_tmpl.data.buswidth == 1)
+		return -ENOTSUPP;
+
+	return 0;
+}
+
+static u32 dw_spi_update_xip_cr(const struct spi_mem_op *op, uint frf)
+{
+	uint trans_type, wait_cycles;
+
+	/* This assumes support_op has filtered invalid types */
+	if (op->addr.buswidth == 1)
+		trans_type = TRANS_TYPE_1_1_X;
+	else if (op->cmd.buswidth == 1)
+		trans_type = TRANS_TYPE_1_X_X;
+	else
+		trans_type = TRANS_TYPE_X_X_X;
+
+	if (op->dummy.buswidth)
+		wait_cycles = op->dummy.nbytes * 8 / op->dummy.buswidth;
+	else
+		wait_cycles = 0;
+
+	return FIELD_PREP(XIP_CTRL_FRF, frf)
+	       | FIELD_PREP(XIP_CTRL_TRANS_TYPE_MASK, trans_type)
+	       | FIELD_PREP(XIP_CTRL_ADDR_L_MASK, op->addr.nbytes * 2)
+	       | FIELD_PREP(XIP_CTRL_INST_L_MASK, INST_L_8)
+	       | FIELD_PREP(XIP_CTRL_WAIT_CYCLES_MASK, wait_cycles)
+	       //| XIP_CTRL_DFS_HC
+	       | XIP_CTRL_INST_EN
+	       | XIP_CTRL_CONT_XFER_EN
+	       | XIP_CTRL_PREFETCH_EN;
+}
+
+static ssize_t dw_spi_dirmap_read(struct spi_mem_dirmap_desc *desc, u64 offs,
+				  size_t len, void *buf)
+{
+	int ret;
+	size_t count = len;
+	struct spi_slave *slave = desc->slave;
+	struct udevice *bus = slave->dev->parent;
+	struct dw_spi_priv *priv = dev_get_priv(bus);
+	struct spi_mem_op *op = &desc->info.op_tmpl;
+	u8 *from, *to;
+
+	switch (op->data.buswidth) {
+	case 2:
+		priv->spi_frf = CTRLR0_SPI_FRF_DUAL;
+		break;
+	case 4:
+		priv->spi_frf = CTRLR0_SPI_FRF_QUAD;
+		break;
+	case 8:
+		priv->spi_frf = CTRLR0_SPI_FRF_OCTAL;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = dw_spi_mux_ctrl(bus);
+	if (ret)
+		return ret;
+
+	dw_write(priv, DW_SPI_SSIENR, 0);
+	//dw_write(priv, DW_SPI_CTRLR0, dw_spi_update_cr0(priv));
+	dw_write(priv, DW_SPI_XIP_CTRL, dw_spi_update_xip_cr(op, priv->spi_frf));
+	dw_write(priv, DW_SPI_XIP_INCR_INST, op->cmd.opcode);
+	/*
+	 * FIXME: U-Boot doesn't currently support wrap instructions, but we
+	 * can't control what the AHB master does. Just write 0 to get something
+	 * obviously bogus.
+	 */
+	dw_write(priv, DW_SPI_XIP_WRAP_INST, 0);
+	dw_write(priv, DW_SPI_XIP_SER, 1 << spi_chip_select(slave->dev));
+	dw_write(priv, DW_SPI_SSIENR, 1);
+
+	dw_spi_mux_deselect(bus);
+
+	external_cs_manage(slave->dev, true);
+
+	ret = dw_spi_mux_xip(bus);
+	if (ret)
+		return ret;
+
+	//memcpy(buf, priv->regs + offs, len);
+	from = priv->regs + offs;
+	to = buf;
+	while (count--)
+		*to++ = *from++;
+
+	dw_spi_mux_deselect(bus);
+
+	external_cs_manage(slave->dev, false);
+
+	return len;
+}
+#endif /* CONFIG_SPI_DIRMAP */
+
 static const struct spi_controller_mem_ops dw_spi_mem_ops = {
 	.exec_op = dw_spi_exec_op,
 	.supports_op = dw_spi_supports_op,
 	.adjust_op_size = dw_spi_adjust_op_size,
+#if CONFIG_IS_ENABLED(SPI_DIRMAP)
+	.dirmap_create = dw_spi_dirmap_create,
+	.dirmap_read = dw_spi_dirmap_read,
+#endif
 };
 
 static int dw_spi_set_speed(struct udevice *bus, uint speed)

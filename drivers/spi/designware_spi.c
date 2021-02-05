@@ -19,6 +19,7 @@
 #include <fdtdec.h>
 #include <log.h>
 #include <malloc.h>
+#include <mux.h>
 #include <reset.h>
 #include <spi.h>
 #include <spi-mem.h>
@@ -209,6 +210,7 @@ struct dw_spi_priv {
 	struct clk clk;
 	struct reset_ctl_bulk resets;
 	struct gpio_desc cs_gpio;	/* External chip-select gpio */
+	struct mux_control *mux;	/* XIP mode mux */
 
 	void __iomem *regs;
 	fdt_size_t regs_size;
@@ -225,6 +227,7 @@ struct dw_spi_priv {
 	unsigned int freq;		/* Default frequency */
 	unsigned int mode;
 
+	u32 mux_xip_state;		/* Mux state to enable XIP mode */
 	u32 fifo_len;			/* depth of the FIFO buffer */
 
 	int bits_per_word;
@@ -346,10 +349,78 @@ static int dw_spi_of_to_plat(struct udevice *bus)
 	return request_gpio_cs(bus);
 }
 
-/* Restart the controller, disable all interrupts, clean rx fifo */
-static void spi_hw_init(struct udevice *bus, struct dw_spi_priv *priv)
+static int dw_spi_mux(struct udevice *dev, bool xip)
 {
+	struct dw_spi_priv *priv = dev_get_priv(dev);
+
+	if (!priv->mux)
+		return 0;
+
+	if (xip && priv->mux_xip_state)
+		return mux_control_select(priv->mux, priv->mux_xip_state);
+	else
+		return mux_control_select(priv->mux, 0);
+}
+
+/*
+ * dw_spi_mux_regs() - Select the control registers using the XIP mux
+ * @dev: The device to mux
+ *
+ * This selects the control registers using the XIP mux, driving the xip_en
+ * signal low. This function must be called before any accesses to control
+ * registers.
+ *
+ * Return: 0 on success or negative error value
+ */
+static inline int dw_spi_mux_regs(struct udevice *dev)
+{
+	return dw_spi_mux(dev, false);
+}
+
+/*
+ * dw_spi_mux_xip() - Select the control registers using the XIP mux
+ * @dev: The device to mux
+ *
+ * This selects XIP mode using the XIP mux, driving the xip_en signal high. This
+ * function must be called before any XIP accesses.
+ *
+ * Return: 0 on success or negative error value
+ */
+static inline int dw_spi_mux_xip(struct udevice *dev)
+{
+	return dw_spi_mux(dev, true);
+}
+
+/*
+ * dw_spi_mux_deselect()
+ * @dev: The device to mux
+ *
+ * This deselects the XIP mux, returning it to its default state. This must be
+ * called after control register or XIP accesses are finished, before other
+ * calls to @dw_spi_mux_regs or @dw_spi_mux_xip.
+ */
+static void dw_spi_mux_deselect(struct udevice *dev)
+{
+	int err;
+	struct dw_spi_priv *priv = dev_get_priv(dev);
+
+	if (!priv->mux)
+		return;
+
+	err = mux_control_deselect(priv->mux);
+	if (err)
+		dev_warn(dev, "could not deselect mux (err %d)\n", err);
+}
+
+/* Restart the controller, disable all interrupts, clean rx fifo */
+static int spi_hw_init(struct udevice *bus, struct dw_spi_priv *priv)
+{
+	int ret;
 	u32 cr0;
+
+	ret = dw_spi_mux_regs(bus);
+	if (ret)
+		return ret;
 
 	dw_write(priv, DW_SPI_SSIENR, 0);
 	dw_write(priv, DW_SPI_IMR, 0);
@@ -415,6 +486,9 @@ static void spi_hw_init(struct udevice *bus, struct dw_spi_priv *priv)
 
 	/* Set receive fifo interrupt level register for clock stretching */
 	dw_write(priv, DW_SPI_RXFTLR, priv->fifo_len - 1);
+
+	dw_spi_mux_deselect(bus);
+	return 0;
 }
 
 /*
@@ -480,6 +554,33 @@ static int dw_spi_reset(struct udevice *bus)
 	return 0;
 }
 
+int dw_spi_get_mux(struct udevice *bus)
+{
+	int ret;
+	struct dw_spi_priv *priv = dev_get_priv(bus);
+
+	ret = mux_get_by_index(bus, 0, &priv->mux);
+	if (ret) {
+		/*
+		 * Return 0 if error due to !CONFIG_MUX or mux
+		 * DT property is not present.
+		 */
+		if (ret == -ENOENT || ret == -ENOTSUPP)
+			return 0;
+
+		dev_warn(bus, "Couldn't get xip mux (error %d)\n", ret);
+		return ret;
+	}
+
+	ret = dev_read_u32(bus, "mux-xip-state", &priv->mux_xip_state);
+	if (ret || priv->mux_xip_state > 1) {
+		dev_warn(bus, "Invalid/missing mux-xip-state property\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int dw_spi_probe(struct udevice *bus)
 {
 	struct dw_spi_plat *plat = dev_get_plat(bus);
@@ -499,6 +600,10 @@ static int dw_spi_probe(struct udevice *bus)
 	if (ret)
 		return ret;
 
+	ret = dw_spi_get_mux(bus);
+	if (ret)
+		return ret;
+
 	/* Currently only bits_per_word == 8 supported */
 	priv->bits_per_word = 8;
 
@@ -506,7 +611,12 @@ static int dw_spi_probe(struct udevice *bus)
 
 	/* Basic HW init */
 	priv->caps = dev_get_driver_data(bus);
-	spi_hw_init(bus, priv);
+	ret = spi_hw_init(bus, priv);
+	if (ret)
+		return ret;
+
+	if (!priv->mux)
+		priv->caps &= DW_SPI_CAP_XIP;
 
 	version = dw_read(priv, DW_SPI_VERSION);
 	dev_dbg(bus,
@@ -713,6 +823,10 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 		return -1;
 	}
 
+	ret = dw_spi_mux_regs(bus);
+	if (ret)
+		return ret;
+
 	frames = bitlen / priv->bits_per_word;
 
 	/* Start the transaction if necessary. */
@@ -779,6 +893,8 @@ static int dw_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	if (flags & SPI_XFER_END)
 		external_cs_manage(dev, true);
 
+	dw_spi_mux_deselect(bus);
+
 	return ret;
 }
 
@@ -830,6 +946,10 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 			priv->tmode = CTRLR0_TMOD_RO;
 	else
 		priv->tmode = CTRLR0_TMOD_TO;
+
+	ret = dw_spi_mux_regs(bus);
+	if (ret)
+		return ret;
 
 	cr0 = dw_spi_update_cr0(priv);
 	spi_cr0 = dw_spi_update_spi_cr0(op);
@@ -891,6 +1011,7 @@ static int dw_spi_exec_op(struct spi_slave *slave, const struct spi_mem_op *op)
 	}
 	dw_write(priv, DW_SPI_SER, 0);
 	external_cs_manage(slave->dev, true);
+	dw_spi_mux_deselect(bus);
 
 	dev_dbg(bus, "%u bytes xfered\n", op->data.nbytes);
 	return ret;
@@ -943,9 +1064,14 @@ static const struct spi_controller_mem_ops dw_spi_mem_ops = {
 
 static int dw_spi_set_speed(struct udevice *bus, uint speed)
 {
+	int ret;
 	struct dw_spi_plat *plat = dev_get_plat(bus);
 	struct dw_spi_priv *priv = dev_get_priv(bus);
 	u16 clk_div;
+
+	ret = dw_spi_mux_regs(bus);
+	if (ret)
+		return ret;
 
 	if (speed > plat->frequency)
 		speed = plat->frequency;
@@ -960,6 +1086,7 @@ static int dw_spi_set_speed(struct udevice *bus, uint speed)
 
 	/* Enable controller after writing control registers */
 	dw_write(priv, DW_SPI_SSIENR, 1);
+	mux_control_deselect(priv->mux);
 
 	priv->freq = speed;
 	dev_dbg(bus, "speed=%d clk_div=%d\n", priv->freq, clk_div);

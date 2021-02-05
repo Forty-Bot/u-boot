@@ -87,8 +87,11 @@ static int mmio_mux_probe(struct udevice *dev)
 
 	ret = dev_read_u32_array(dev, "idle-states", idle_states, num_fields);
 	if (ret < 0) {
-		log_err("idle-states");
 		devm_kfree(dev, idle_states);
+		/* dev_read_u32_array returns -EINVAL on missing property */
+		if (ret != -EINVAL)
+			return log_msg_ret("idle-states", -EINVAL);
+
 		idle_states = NULL;
 	}
 

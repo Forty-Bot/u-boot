@@ -453,6 +453,10 @@ struct global_data {
 	 */
 	char *smbios_version;
 #endif
+	/**
+	 * @cmd_result: Result of the current command
+	 */
+	char *cmd_result;
 };
 
 /**

@@ -588,6 +588,9 @@ enum command_ret_t cmd_process(int flag, int argc, char *const argv[],
 	enum command_ret_t rc = CMD_RET_SUCCESS;
 	struct cmd_tbl *cmdtp;
 
+	/* Clear previous result */
+	assert(!gd->cmd_result);
+
 #if defined(CONFIG_SYS_XTRACE)
 	char *xtrace;
 

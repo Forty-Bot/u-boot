@@ -475,6 +475,8 @@ static char *make_string(char **inp, int *nonnull);
 static int handle_dollar(o_string *dest, struct p_context *ctx, struct in_str *input);
 #ifndef __U_BOOT__
 static int parse_string(o_string *dest, struct p_context *ctx, const char *src);
+#else
+static void update_ifs_map(void);
 #endif
 static int parse_stream(o_string *dest, struct p_context *ctx, struct in_str *input0, int end_trigger);
 /*   setup: */
@@ -1673,6 +1675,10 @@ static int run_pipe_real(struct pipe *pi)
 					"'run' command\n", child->argv[i]);
 			return -1;
 		}
+		if (gd->cmd_result)
+			puts(gd->cmd_result);
+		free(gd->cmd_result);
+		gd->cmd_result = NULL;
 		/* Process the command */
 		return cmd_process(flag, child->argc - i, child->argv + i,
 				   &flag_repeat, NULL);
@@ -2683,6 +2689,7 @@ FILE *generate_stream_from_list(struct pipe *head)
 #endif
 	return pf;
 }
+#endif /* __U_BOOT__ */
 
 /* this version hacked for testing purposes */
 /* return code is exit status of the process that is run. */
@@ -2691,7 +2698,11 @@ static int process_command_subs(o_string *dest, struct p_context *ctx, struct in
 	int retcode;
 	o_string result=NULL_O_STRING;
 	struct p_context inner;
+#ifdef __U_BOOT__
+	int list_retcode;
+#else
 	FILE *p;
+#endif
 	struct in_str pipe_str;
 	initialize_context(&inner);
 
@@ -2702,13 +2713,21 @@ static int process_command_subs(o_string *dest, struct p_context *ctx, struct in
 	done_pipe(&inner, PIPE_SEQ);
 	b_free(&result);
 
+#ifdef __U_BOOT__
+	list_retcode = run_list_real(inner.list_head);
+	setup_string_in_str(&pipe_str, gd->cmd_result ?: "");
+	/* Restore the original map as best we can */
+	update_ifs_map();
+#else
 	p=generate_stream_from_list(inner.list_head);
 	if (p==NULL) return 1;
 	mark_open(fileno(p));
 	setup_file_in_str(&pipe_str, p);
+#endif
 
 	/* now send results of command back into original context */
 	retcode = parse_stream(dest, ctx, &pipe_str, '\0');
+#ifndef __U_BOOT__
 	/* XXX In case of a syntax error, should we try to kill the child?
 	 * That would be tough to do right, so just read until EOF. */
 	if (retcode == 1) {
@@ -2723,12 +2742,18 @@ static int process_command_subs(o_string *dest, struct p_context *ctx, struct in
 	 * to the KISS philosophy of this program. */
 	mark_closed(fileno(p));
 	retcode=pclose(p);
+#else
+	free(gd->cmd_result);
+	gd->cmd_result = NULL;
+	retcode = list_retcode;
+#endif
 	free_pipe_list(inner.list_head,0);
 	debug_printf("pclosed, retcode=%d\n",retcode);
 	/* XXX this process fails to trim a single trailing newline */
 	return retcode;
 }
 
+#ifndef __U_BOOT__
 static int parse_group(o_string *dest, struct p_context *ctx,
 	struct in_str *input, int ch)
 {
@@ -2896,11 +2921,11 @@ static int handle_dollar(o_string *dest, struct p_context *ctx, struct in_str *i
 			}
 			b_addchr(dest, SPECIAL_VAR_SYMBOL);
 			break;
-#ifndef __U_BOOT__
 		case '(':
 			b_getch(input);
 			process_command_subs(dest, ctx, input, ')');
 			break;
+#ifndef __U_BOOT__
 		case '*':
 			sep[0]=ifs[0];
 			for (i=1; i<global_argc; i++) {
@@ -3165,7 +3190,7 @@ static void update_ifs_map(void)
 		mapset(subst, 3);       /* never flow through */
 	}
 	mapset((uchar *)"\\$'\"", 3);       /* never flow through */
-	mapset((uchar *)";&|#", 1);         /* flow through if quoted */
+	mapset((uchar *)";&|()#", 1);         /* flow through if quoted */
 #endif
 	mapset(ifs, 2);            /* also flow through if quoted */
 }
@@ -3185,7 +3210,8 @@ static int parse_stream_outer(struct in_str *inp, int flag)
 		ctx.type = flag;
 		initialize_context(&ctx);
 		update_ifs_map();
-		if (!(flag & FLAG_PARSE_SEMICOLON) || (flag & FLAG_REPARSING)) mapset((uchar *)";$&|", 0);
+		if (!(flag & FLAG_PARSE_SEMICOLON) || (flag & FLAG_REPARSING))
+			mapset((uchar *)";$&|()", 0);
 		inp->promptmode=1;
 		rcode = parse_stream(&temp, &ctx, inp,
 				     flag & FLAG_CONT_ON_NEWLINE ? -1 : '\n');
@@ -3205,6 +3231,13 @@ static int parse_stream_outer(struct in_str *inp, int flag)
 			run_list(ctx.list_head);
 #else
 			code = run_list(ctx.list_head);
+
+			if (!(flag & FLAG_REPARSING) && gd->cmd_result) {
+				puts(gd->cmd_result);
+				free(gd->cmd_result);
+				gd->cmd_result = NULL;
+			}
+
 			if (code == -2) {	/* exit */
 				b_free(&temp);
 				code = 0;

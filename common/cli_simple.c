@@ -15,13 +15,15 @@
 #include <console.h>
 #include <env.h>
 #include <log.h>
+#include <malloc.h>
 #include <linux/ctype.h>
+
+DECLARE_GLOBAL_DATA_PTR;
 
 #define DEBUG_PARSER	0	/* set to 1 to debug */
 
 #define debug_parser(fmt, args...)		\
 	debug_cond(DEBUG_PARSER, fmt, ##args)
-
 
 int cli_simple_parse_line(char *line, char *argv[])
 {
@@ -257,6 +259,10 @@ int cli_simple_run_command(const char *cmd, int flag)
 
 		if (cmd_process(flag, argc, argv, &repeatable, NULL))
 			rc = -1;
+		if (gd->cmd_result)
+			puts(gd->cmd_result);
+		free(gd->cmd_result);
+		gd->cmd_result = NULL;
 
 		/* Did the user stop this? */
 		if (had_ctrlc())

@@ -19,8 +19,11 @@
 #include <config.h>
 #include <command.h>
 #include <env.h>
+#include <malloc.h>
 #include <part.h>
 #include <vsprintf.h>
+
+DECLARE_GLOBAL_DATA_PTR;
 
 enum cmd_part_info {
 	CMD_PART_INFO_START = 0,
@@ -43,12 +46,19 @@ static int do_part_uuid(int argc, char *const argv[])
 	if (part < 0)
 		return 1;
 
-	if (argc > 2)
+	if (argc > 2) {
 		env_set(argv[2], info.uuid);
-	else
-		printf("%s\n", info.uuid);
+	} else {
+		size_t result_size = sizeof(info.uuid) + 1;
 
-	return 0;
+		gd->cmd_result = malloc(result_size);
+		if (!gd->cmd_result)
+			return CMD_RET_FAILURE;
+
+		snprintf(gd->cmd_result, result_size, "%s\n", info.uuid);
+	}
+
+	return CMD_RET_SUCCESS;
 }
 
 static int do_part_list(int argc, char *const argv[])

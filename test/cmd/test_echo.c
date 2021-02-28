@@ -31,13 +31,21 @@ static struct test_data echo_data[] = {
 	 * j, q, x are among the least frequent letters in English.
 	 * Hence no collision for the variable name jQx is expected.
 	 */
-	{"setenv jQx X; echo \"a)\" ${jQx} 'b)' '${jQx}' c) ${jQx}; setenv jQx",
+	{"setenv jQx X; echo \"a)\" ${jQx} 'b)' '${jQx}' c\\) ${jQx}; setenv jQx",
 	 "a) X b) ${jQx} c) X"},
 	/* Test shell variable assignments without substitutions */
 	{"foo=bar echo baz", "baz"},
 	/* Test handling of shell variables. */
 	{"setenv jQx; for jQx in 1 2 3; do echo -n \"${jQx}, \"; done; echo;",
 	 "1, 2, 3, "},
+	/* Test basic command substitution */
+	{"jQx=3 echo 1 $(echo 2) $jQx", "1 2 3"},
+	/*
+	 * The following test fails because the subshell is evaluated before
+	 * anything else, but the jQx2 assignment should happen beforehand
+	 */
+	//{"jQx2=2; echo 1 $(echo ${jQx2}) 3",
+	//"1 2 3"},
 };
 
 static int lib_test_hush_echo(struct unit_test_state *uts)

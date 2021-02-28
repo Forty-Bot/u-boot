@@ -372,15 +372,17 @@ static inline void debug_printf(const char *format, ...) { }
 #endif
 #define final_printf debug_printf
 
-#ifdef __U_BOOT__
+#ifdef DEBUG_SHELL
+static void __syntax(char *file, int line)
+{
+	error_msg("syntax error %s:%d\n", file, line);
+}
+
+#define syntax_err() __syntax(__FILE__, __LINE__)
+#else
 static void syntax_err(void) {
 	 printf("syntax error\n");
 }
-#else
-static void __syntax(char *file, int line) {
-	error_msg("syntax error %s:%d", file, line);
-}
-#define syntax() __syntax(__FILE__, __LINE__)
 #endif
 
 #ifdef __U_BOOT__

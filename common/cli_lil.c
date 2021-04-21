@@ -130,17 +130,6 @@ static struct lil_env **envpool;
 static size_t envpoolsize, envpoolcap;
 #endif
 
-static char *strclone(const char *s)
-{
-	size_t len = strlen(s) + 1;
-	char *ns = malloc(len);
-
-	if (!ns)
-		return NULL;
-	memcpy(ns, s, len);
-	return ns;
-}
-
 static unsigned long hm_hash(const char *key)
 {
 	unsigned long hash = 5381;
@@ -180,7 +169,7 @@ static void hm_put(struct hashmap *hm, const char *key, void *value)
 	}
 
 	cell->e = realloc(cell->e, sizeof(struct hashentry) * (cell->c + 1));
-	cell->e[cell->c].k = strclone(key);
+	cell->e[cell->c].k = strdup(key);
 	cell->e[cell->c].v = value;
 	cell->c++;
 }
@@ -616,7 +605,7 @@ static struct lil_func *add_func(struct lil *lil, const char *name)
 	}
 
 	cmd = calloc(1, sizeof(struct lil_func));
-	cmd->name = strclone(name);
+	cmd->name = strdup(name);
 
 	ncmd = realloc(lil->cmd, sizeof(struct lil_func *) * (lil->cmds + 1));
 	if (!ncmd) {
@@ -723,7 +712,7 @@ struct lil_var *lil_set_var(struct lil *lil, const char *name,
 
 	env->var = nvar;
 	nvar[env->vars] = calloc(1, sizeof(struct lil_var));
-	nvar[env->vars]->n = strclone(name);
+	nvar[env->vars]->n = strdup(name);
 	nvar[env->vars]->w = NULL;
 	nvar[env->vars]->env = env;
 	nvar[env->vars]->v = freeval ? val : lil_clone_value(val);
@@ -779,7 +768,7 @@ struct lil *lil_new(void)
 
 	lil->rootenv = lil->env = lil_alloc_env(NULL);
 	lil->empty = alloc_value(NULL);
-	lil->dollarprefix = strclone("set ");
+	lil->dollarprefix = strdup("set ");
 	hm_init(&lil->cmdmap);
 	register_stdcmds(lil);
 	return lil;
@@ -1314,7 +1303,7 @@ void lil_set_error(struct lil *lil, const char *msg)
 	free(lil->err_msg);
 	lil->error = ERROR_FIXHEAD;
 	lil->err_head = 0;
-	lil->err_msg = strclone(msg ? msg : "");
+	lil->err_msg = strdup(msg ? msg : "");
 }
 
 void lil_set_error_at(struct lil *lil, size_t pos, const char *msg)
@@ -1325,7 +1314,7 @@ void lil_set_error_at(struct lil *lil, size_t pos, const char *msg)
 	free(lil->err_msg);
 	lil->error = ERROR_DEFAULT;
 	lil->err_head = pos;
-	lil->err_msg = strclone(msg ? msg : "");
+	lil->err_msg = strdup(msg ? msg : "");
 }
 
 int lil_error(struct lil *lil, const char **msg, size_t *pos)
@@ -2038,7 +2027,7 @@ static struct lil_value *fnc_reflect(struct lil *lil, size_t argc,
 
 		r = lil_alloc_string(lil->dollarprefix);
 		free(lil->dollarprefix);
-		lil->dollarprefix = strclone(lil_to_string(argv[1]));
+		lil->dollarprefix = strdup(lil_to_string(argv[1]));
 		return r;
 	}
 
@@ -2139,7 +2128,7 @@ static struct lil_value *fnc_rename(struct lil *lil, size_t argc,
 		hm_put(&lil->cmdmap, oldname, 0);
 		hm_put(&lil->cmdmap, newname, func);
 		free(func->name);
-		func->name = strclone(newname);
+		func->name = strdup(newname);
 	} else {
 		del_func(lil, func);
 	}
@@ -2964,7 +2953,7 @@ static struct lil_value *real_trim(const char *str, const char *chars, int left,
 		size_t len;
 		char *s;
 
-		s = strclone(str + base);
+		s = strdup(str + base);
 		len = strlen(s);
 		while (len && strchr(chars, s[len - 1]))
 			len--;
@@ -3069,7 +3058,7 @@ static struct lil_value *fnc_repstr(struct lil *lil, size_t argc,
 	if (!from[0])
 		return NULL;
 
-	src = strclone(lil_to_string(argv[0]));
+	src = strdup(lil_to_string(argv[0]));
 	srclen = strlen(src);
 	fromlen = strlen(from);
 	tolen = strlen(to);
@@ -3184,7 +3173,7 @@ static struct lil_value *fnc_catcher(struct lil *lil, size_t argc,
 		const char *catcher = lil_to_string(argv[0]);
 
 		free(lil->catcher);
-		lil->catcher = catcher[0] ? strclone(catcher) : NULL;
+		lil->catcher = catcher[0] ? strdup(catcher) : NULL;
 		return NULL;
 	}
 }
@@ -3211,7 +3200,7 @@ static struct lil_value *fnc_watch(struct lil *lil, size_t argc,
 			v = lil_set_var(lil, vname, NULL, LIL_SETVAR_LOCAL_NEW);
 
 		free(v->w);
-		v->w = wcode[0] ? strclone(wcode) : NULL;
+		v->w = wcode[0] ? strdup(wcode) : NULL;
 	}
 
 	return NULL;

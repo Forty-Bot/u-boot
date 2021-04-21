@@ -23,6 +23,12 @@ config HUSH_PARSER
 	  If disabled, you get the old, much simpler behaviour with a somewhat
 	  smaller memory footprint.
 
+config LIL
+	bool "Use LIL shell"
+	depends on CMDLINE
+	help
+	  TODO
+
 config CMDLINE_EDITING
 	bool "Enable command line editing"
 	depends on CMDLINE
@@ -1379,7 +1385,7 @@ config CMD_ECHO
 
 config CMD_ITEST
 	bool "itest"
-	default y
+	default y if !LIL
 	help
 	  Return true/false on integer compare.
 

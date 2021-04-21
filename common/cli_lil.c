@@ -1048,7 +1048,7 @@ static struct lil_value *unknown_cmd(struct lil *lil, struct lil_list *words)
 {
 	struct lil_value *r = NULL;
 
-	if (lil->catcher) {
+	if (IS_ENABLED(CONFIG_LIL_FULL) && lil->catcher) {
 		if (lil->in_catcher < MAX_CATCHER_DEPTH) {
 			struct lil_value *args;
 
@@ -1428,7 +1428,7 @@ static void ee_unary(struct expreval *ee)
 static void ee_muldiv(struct expreval *ee)
 {
 	ee_unary(ee);
-	if (ee->error)
+	if (ee->error || !IS_ENABLED(CONFIG_LIL_FULL))
 		return;
 
 	ee_skip_spaces(ee);
@@ -1492,8 +1492,10 @@ static void ee_muldiv(struct expreval *ee)
 static void ee_addsub(struct expreval *ee)
 {
 	ee_muldiv(ee);
-	ee_skip_spaces(ee);
+	if (!IS_ENABLED(CONFIG_LIL_FULL))
+		return;
 
+	ee_skip_spaces(ee);
 	while (ee->head < ee->len && !ee->error &&
 	       !ee_invalidpunct(ee->code[ee->head + 1]) &&
 	       (ee->code[ee->head] == '+' || ee->code[ee->head] == '-')) {
@@ -1525,8 +1527,10 @@ static void ee_addsub(struct expreval *ee)
 static void ee_shift(struct expreval *ee)
 {
 	ee_addsub(ee);
-	ee_skip_spaces(ee);
+	if (!IS_ENABLED(CONFIG_LIL_FULL))
+		return;
 
+	ee_skip_spaces(ee);
 	while (ee->head < ee->len && !ee->error &&
 	       ((ee->code[ee->head] == '<' && ee->code[ee->head + 1] == '<') ||
 		(ee->code[ee->head] == '>' && ee->code[ee->head + 1] == '>'))) {
@@ -1655,8 +1659,10 @@ static void ee_equals(struct expreval *ee)
 static void ee_bitand(struct expreval *ee)
 {
 	ee_equals(ee);
-	ee_skip_spaces(ee);
+	if (!IS_ENABLED(CONFIG_LIL_FULL))
+		return;
 
+	ee_skip_spaces(ee);
 	while (ee->head < ee->len && !ee->error &&
 	       (ee->code[ee->head] == '&' &&
 		!ee_invalidpunct(ee->code[ee->head + 1]))) {
@@ -1676,8 +1682,10 @@ static void ee_bitand(struct expreval *ee)
 static void ee_bitor(struct expreval *ee)
 {
 	ee_bitand(ee);
-	ee_skip_spaces(ee);
+	if (!IS_ENABLED(CONFIG_LIL_FULL))
+		return;
 
+	ee_skip_spaces(ee);
 	while (ee->head < ee->len && !ee->error &&
 	       (ee->code[ee->head] == '|' &&
 		!ee_invalidpunct(ee->code[ee->head + 1]))) {
@@ -3208,54 +3216,58 @@ static struct lil_value *fnc_watch(struct lil *lil, size_t argc,
 
 static void register_stdcmds(struct lil *lil)
 {
-	lil_register(lil, "append", fnc_append);
-	lil_register(lil, "catcher", fnc_catcher);
-	lil_register(lil, "char", fnc_char);
-	lil_register(lil, "charat", fnc_charat);
-	lil_register(lil, "codeat", fnc_codeat);
-	lil_register(lil, "concat", fnc_concat);
-	lil_register(lil, "count", fnc_count);
 	lil_register(lil, "dec", fnc_dec);
-	lil_register(lil, "downeval", fnc_downeval);
-	lil_register(lil, "enveval", fnc_enveval);
-	lil_register(lil, "error", fnc_error);
 	lil_register(lil, "eval", fnc_eval);
 	lil_register(lil, "expr", fnc_expr);
-	lil_register(lil, "filter", fnc_filter);
 	lil_register(lil, "for", fnc_for);
 	lil_register(lil, "foreach", fnc_foreach);
 	lil_register(lil, "func", fnc_func);
 	lil_register(lil, "if", fnc_if);
 	lil_register(lil, "inc", fnc_inc);
-	lil_register(lil, "index", fnc_index);
-	lil_register(lil, "indexof", fnc_indexof);
-	lil_register(lil, "jaileval", fnc_jaileval);
-	lil_register(lil, "length", fnc_length);
-	lil_register(lil, "list", fnc_list);
-	lil_register(lil, "lmap", fnc_lmap);
 	lil_register(lil, "local", fnc_local);
-	lil_register(lil, "ltrim", fnc_ltrim);
-	lil_register(lil, "quote", fnc_quote);
-	lil_register(lil, "reflect", fnc_reflect);
-	lil_register(lil, "rename", fnc_rename);
-	lil_register(lil, "repstr", fnc_repstr);
-	lil_register(lil, "result", fnc_result);
 	lil_register(lil, "return", fnc_return);
-	lil_register(lil, "rtrim", fnc_rtrim);
 	lil_register(lil, "set", fnc_set);
-	lil_register(lil, "slice", fnc_slice);
-	lil_register(lil, "split", fnc_split);
 	lil_register(lil, "strcmp", fnc_strcmp);
-	lil_register(lil, "streq", fnc_streq);
-	lil_register(lil, "strpos", fnc_strpos);
-	lil_register(lil, "subst", fnc_subst);
-	lil_register(lil, "substr", fnc_substr);
-	lil_register(lil, "topeval", fnc_topeval);
-	lil_register(lil, "trim", fnc_trim);
 	lil_register(lil, "try", fnc_try);
-	lil_register(lil, "unusedname", fnc_unusedname);
-	lil_register(lil, "upeval", fnc_upeval);
-	lil_register(lil, "watch", fnc_watch);
 	lil_register(lil, "while", fnc_while);
+
+	if (IS_ENABLED(CONFIG_LIL_FULL)) {
+		lil_register(lil, "append", fnc_append);
+		lil_register(lil, "catcher", fnc_catcher);
+		lil_register(lil, "char", fnc_char);
+		lil_register(lil, "charat", fnc_charat);
+		lil_register(lil, "codeat", fnc_codeat);
+		lil_register(lil, "concat", fnc_concat);
+		lil_register(lil, "count", fnc_count);
+		lil_register(lil, "downeval", fnc_downeval);
+		lil_register(lil, "enveval", fnc_enveval);
+		lil_register(lil, "error", fnc_error);
+		lil_register(lil, "filter", fnc_filter);
+		lil_register(lil, "index", fnc_index);
+		lil_register(lil, "indexof", fnc_indexof);
+		lil_register(lil, "jaileval", fnc_jaileval);
+		lil_register(lil, "length", fnc_length);
+		lil_register(lil, "list", fnc_list);
+		lil_register(lil, "lmap", fnc_lmap);
+		lil_register(lil, "ltrim", fnc_ltrim);
+		lil_register(lil, "quote", fnc_quote);
+		lil_register(lil, "reflect", fnc_reflect);
+		lil_register(lil, "rename", fnc_rename);
+		lil_register(lil, "repstr", fnc_repstr);
+		lil_register(lil, "result", fnc_result);
+		lil_register(lil, "rtrim", fnc_rtrim);
+		lil_register(lil, "slice", fnc_slice);
+		lil_register(lil, "split", fnc_split);
+		lil_register(lil, "streq", fnc_streq);
+		lil_register(lil, "strpos", fnc_strpos);
+		lil_register(lil, "subst", fnc_subst);
+		lil_register(lil, "substr", fnc_substr);
+		lil_register(lil, "topeval", fnc_topeval);
+		lil_register(lil, "trim", fnc_trim);
+		lil_register(lil, "unusedname", fnc_unusedname);
+		lil_register(lil, "upeval", fnc_upeval);
+		lil_register(lil, "watch", fnc_watch);
+	}
+
 	lil->syscmds = lil->cmds;
 }

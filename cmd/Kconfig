@@ -29,6 +29,16 @@ config LIL
 	help
 	  TODO
 
+if LIL
+
+config LIL_FULL
+	bool "Enable all LIL features"
+	help
+	  This enables all LIL builtin functions, as well as expression support
+	  for arithmetic and bitwise operations.
+
+endif
+
 config CMDLINE_EDITING
 	bool "Enable command line editing"
 	depends on CMDLINE

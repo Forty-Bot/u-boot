@@ -24,10 +24,6 @@
  * overflows and is also useful when running through an automated fuzzer like AFL */
 /*#define LIL_ENABLE_RECLIMIT 10000*/
 
-#define ERROR_NOERROR 0
-#define ERROR_DEFAULT 1
-#define ERROR_FIXHEAD 2
-
 #define CALLBACKS 8
 #define MAX_CATCHER_DEPTH 16384
 #define HASHMAP_CELLS 256
@@ -104,7 +100,11 @@ struct lil {
 	struct lil_env *rootenv;
 	struct lil_env *downenv;
 	struct lil_value *empty;
-	int error;
+	enum {
+		ERROR_NOERROR = 0,
+		ERROR_DEFAULT,
+		ERROR_FIXHEAD,
+	} error;
 	size_t err_head;
 	char *err_msg;
 	lil_callback_proc_t callback[CALLBACKS];
@@ -115,7 +115,12 @@ struct expreval {
 	const char *code;
 	size_t len, head;
 	ssize_t ival;
-	int error;
+	enum {
+		EERR_NO_ERROR = 0,
+		EERR_SYNTAX_ERROR,
+		EERR_DIVISION_BY_ZERO,
+		EERR_INVALID_EXPRESSION,
+	} error;
 };
 
 static struct lil_value *next_word(struct lil *lil);
@@ -655,7 +660,7 @@ int lil_register(struct lil *lil, const char *name, lil_func_proc_t proc)
 }
 
 struct lil_var *lil_set_var(struct lil *lil, const char *name,
-			    struct lil_value *val, int local)
+			    struct lil_value *val, enum lil_setvar local)
 {
 	struct lil_var **nvar;
 	struct lil_env *env =
@@ -1329,11 +1334,6 @@ int lil_error(struct lil *lil, const char **msg, size_t *pos)
 	return 1;
 }
 
-#define EERR_NO_ERROR 0
-#define EERR_SYNTAX_ERROR 1
-#define EERR_DIVISION_BY_ZERO 3
-#define EERR_INVALID_EXPRESSION 4
-
 static void ee_expr(struct expreval *ee);
 
 static int ee_invalidpunct(int ch)
@@ -1783,16 +1783,18 @@ struct lil_value *lil_eval_expr(struct lil *lil, struct lil_value *code)
 
 	ee_expr(&ee);
 	lil_free_value(code);
-	if (ee.error) {
-		switch (ee.error) {
-		case EERR_DIVISION_BY_ZERO:
-			lil_set_error(lil, "division by zero in expression");
-			break;
-		case EERR_SYNTAX_ERROR:
-			lil_set_error(lil, "expression syntax error");
-			break;
-		}
+	switch (ee.error) {
+	case EERR_DIVISION_BY_ZERO:
+		lil_set_error(lil, "division by zero in expression");
 		return NULL;
+	case EERR_SYNTAX_ERROR:
+		lil_set_error(lil, "expression syntax error");
+		return NULL;
+	case EERR_INVALID_EXPRESSION:
+		lil_set_error(lil, "invalid expression");
+		return NULL;
+	case EERR_NO_ERROR:
+		break;
 	}
 	return lil_alloc_integer(ee.ival);
 }

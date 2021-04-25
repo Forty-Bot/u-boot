@@ -30,20 +30,44 @@
 #define HASHMAP_CELLS 256
 #define HASHMAP_CELLMASK 0xFF
 
+/**
+ * struct hashentry - An entry in a cell
+ * @k: The key
+ * @v: The value
+ */
 struct hashentry {
 	char *k;
 	void *v;
 };
 
+/**
+ * struct hashcell - A list of entries with the same hash
+ * @e: An array of entries
+ * @c: The capacity of this cell
+ */
 struct hashcell {
 	struct hashentry *e;
 	size_t c;
 };
 
+/**
+ * struct hashmap - An array-based hash map
+ * @cell: An array of cells
+ *
+ * This hash map uses separate chaining with an array for each cell. We cannot
+ * use the existing hash map functions (hsearch_r et al.) because they assume
+ * that the value is a string.
+ */
 struct hashmap {
 	struct hashcell cell[HASHMAP_CELLS];
 };
 
+/**
+ * struct lil_value - A string and its length
+ * @l: The length of the value.
+ * @c: The capacity of this value (maximum of @l before requiring reallocation).
+ * @d: The contents of the value, as a nul-terminated string.
+ */
 struct lil_value {
 	size_t l;
 #ifdef LIL_ENABLE_POOLS
@@ -52,6 +76,13 @@ struct lil_value {
 	char *d;
 };
 
+/**
+ * struct lil_var - A variable
+ * @n: The name of this variable
+ * @w: Code to evaluate when this variable changes
+ * @env: The environment containing this variable
+ * @v: The value of this variable
+ */
 struct lil_var {
 	char *n;
 	char *w;
@@ -59,6 +90,23 @@ struct lil_var {
 	struct lil_value *v;
 };
 
+/**
+ * struct lil_env - A function call's execution environment
+ * @parent: The parent of this environment. This is %NULL for the root
+ *          environment.
+ * @func: The currently-executing function
+ * @proc: The name of the currently-executing built-in procedure
+ * @catcher_for: The command the catcher is trying to resolve
+ * @var: A list of the variables in this environment
+ * @vars: The number of variables in @var
+ * @varmap: A hash map mapping variable names to pointers to variables in @var
+ * @retval: The value set by "return" or "result"
+ * @retval_set: Whether @retval has been set
+ * @breakrun: Whether to immediately break out the current run of execution.
+ *            This is set by "return"
+ *
+ * Variables are inherited from @parent.
+ */
 struct lil_env {
 	struct lil_env *parent;
 	struct lil_func *func;
@@ -72,12 +120,28 @@ struct lil_env {
 	int breakrun;
 };
 
+/**
+ * struct list - A list of values
+ * @v: A list of pointers to &struct lil_value
+ * @c: The number of values in this list
+ * @cap: The space allocated for @v
+ */
 struct lil_list {
 	struct lil_value **v;
 	size_t c;
 	size_t cap;
 };
 
+/**
+ * struct lil_func - A function which may be evaluated with a list of arguments
+ * @name: The name of the function
+ * @code: A value containing LIL code to be evaluated
+ * @argnames: The names of variables to assign to the passed-in arguments
+ * @proc: A C function to use to evaluate this function
+ *
+ * @code and @argnames are only used to evaluate the function if @proc is %NULL.
+ * If @argnames is empty, then the arguments are assigned to a variable "args".
+ */
 struct lil_func {
 	char *name;
 	struct lil_value *code;
@@ -85,6 +149,36 @@ struct lil_func {
 	lil_func_proc_t proc;
 };
 
+/**
+ * struct lil - The current state of the interpreter
+ * @code: The code which is being interpreted
+ * @rootcode: The top-level code (e.g. the code for the initial call to
+ *            lil_parse())
+ * @clen: The length of @code
+ * @head: The first uninterpreted part of this code, as an index of @code
+ * @ignoreeol: Whether to stop after reaching the end of a line
+ * @cmd: A list of the current commands
+ * @cmds: The number of commands in @cmd
+ * @syscmds: The number of built-in commands
+ * @cmdmap: A hash map mapping command names to pointers to commands in @cmd
+ * @catcher: The name of the command to evaluate when an unknown command is ran
+ * @in_catcher: The depth of recursive calls to the catcher.
+ * @dollarprefix: The string to paste in place of a '$' character. This is
+ *                "set " by default.
+ * @env: The current environment to evaluate commands in
+ * @rootenv: The top-level "root" environment
+ * @downenv: The original environment after a call to "topeval" or "upeval"
+ * @empty: An empty value, allocated once
+ * @ERROR_NOERROR: There is no error.
+ * @ERROR_DEFAULT: There was an error.
+ * @ERROR_FIXHEAD: There was an error, but @err_head needs to be fixed.
+ * @ERROR_UNBALANCED: An opening quote or bracket lacks a balancing closing
+ *                    quote or bracket.
+ * @error: The current error status
+ * @err_head: The offset in @code which caused the @error
+ * @err_msg: An optional string describing the current @error
+ * @parse_depth: The depth of recursive function calls
+ */
 struct lil {
 	const char *code; /* need save on parse */
 	const char *rootcode;
@@ -114,6 +208,19 @@ struct lil {
 	size_t parse_depth;
 };
 
+/**
+ * struct expreval - A (mathematical) expression being evaluated
+ * @code: The complete code for this expression
+ * @len: The length of @code
+ * @head: The first unevaluated part of this expression, as an index of @code
+ * @ival: The integer value of this expression
+ * @EERR_NO_ERROR: There is no error
+ * @EERR_SYNTAX_ERROR: Syntax error. For now this is just mismatched
+ *                     parentheses.
+ * @EERR_DIVISION_BY_ZERO: Attempted division by zero
+ * @EERR_INVALID_EXPRESSION: A non-number was present
+ * @error: The error of this expression (if any)
+ */
 struct expreval {
 	const char *code;
 	size_t len, head;

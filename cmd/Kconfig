@@ -50,6 +50,14 @@ config LIL_POOLS
 	  use more memory but will cause considerably less memory fragmentation
 	  and improve the script execution performance.
 
+config LIL_RECLIMIT
+	int "LIL function recursion limit"
+	default 1000
+	help
+	  Enable limiting recursive calls to lil_parse - this can be used to
+	  avoid call stack overflows and is also useful when running through an
+	  automated fuzzer like AFL. Set to 0 to disable the recursion limit.
+
 endif
 
 endif

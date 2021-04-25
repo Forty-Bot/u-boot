@@ -43,6 +43,13 @@ config LIL_FULL
 	  This enables all LIL builtin functions, as well as expression support
 	  for arithmetic and bitwise operations.
 
+config LIL_POOLS
+	bool "Use memory pools for LIL structures"
+	help
+	  Enable pools for reusing values, lists, and environments. This will
+	  use more memory but will cause considerably less memory fragmentation
+	  and improve the script execution performance.
+
 endif
 
 endif

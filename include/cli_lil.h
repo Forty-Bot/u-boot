@@ -13,10 +13,35 @@
 
 #define LIL_VERSION_STRING "0.1"
 
+/**
+ * enum lil_setvar - The strategy to use when creating new variables
+ */
 enum lil_setvar {
+	/**
+	 * @LIL_SETVAR_GLOBAL: Set in the root environment
+	 */
 	LIL_SETVAR_GLOBAL = 0,
+	/**
+	 * @LIL_SETVAR_LOCAL: Set, starting with the local environment
+	 *
+	 * Search for a variable. If one is found, overwrite it. Otherwise,
+	 * create a new variable in the local environment.
+	 */
 	LIL_SETVAR_LOCAL,
+	/**
+	 * @LIL_SETVAR_LOCAL_NEW: Create in the local environment
+	 *
+	 * Create a new variable in the local environment. This never overrides
+	 * existing variables (even if one exists in the local environment).
+	 */
 	LIL_SETVAR_LOCAL_NEW,
+	/**
+	 * @LIL_SETVAR_LOCAL_ONLY: Set in a local environment only
+	 *
+	 * Search for a variable. If one is found that is not in the root
+	 * environment, overwrite it. Otherwise, create a new variable in the
+	 * local environment.
+	 */
 	LIL_SETVAR_LOCAL_ONLY,
 };
 

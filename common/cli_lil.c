@@ -10,6 +10,7 @@
 
 #include <common.h>
 #include <cli_lil.h>
+#include <console.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -1200,6 +1201,11 @@ struct lil_value *lil_parse(struct lil *lil, const char *code, size_t codelen,
 			lil_free_value(val);
 		val = NULL;
 
+		if (ctrlc()) {
+			lil_set_error_at(lil, lil->head, "interrupted");
+			goto cleanup;
+		}
+
 		words = substitute(lil);
 		if (!words || lil->error)
 			goto cleanup;
@@ -1804,6 +1810,11 @@ static void ee_expr(struct expreval *ee)
 struct lil_value *lil_eval_expr(struct lil *lil, struct lil_value *code)
 {
 	struct expreval ee;
+
+	if (ctrlc()) {
+		lil_set_error(lil, "interrupted");
+		return NULL;
+	}
 
 	code = lil_subst_to_value(lil, code);
 	if (lil->error)

@@ -103,6 +103,7 @@ struct lil {
 		ERROR_NOERROR = 0,
 		ERROR_DEFAULT,
 		ERROR_FIXHEAD,
+		ERROR_UNBALANCED,
 	} error;
 	size_t err_head;
 	char *err_msg;
@@ -131,6 +132,7 @@ static void lil_set_error_at(struct lil *lil, size_t pos, const char *msg);
 static void
 lil_set_errorf_at(struct lil *lil, size_t pos, const char *fmt, ...)
 	__attribute((format(__printf__, 3, 4)));
+static void lil_set_error_unbalanced(struct lil *lil, char expected);
 
 #ifdef LIL_ENABLE_POOLS
 static struct lil_value **pool;
@@ -841,7 +843,8 @@ static void lil_skip_spaces(struct lil *lil)
 static struct lil_value *get_bracketpart(struct lil *lil)
 {
 	size_t cnt = 1;
-	struct lil_value *val, *cmd = alloc_value(NULL);
+	struct lil_value *val = NULL;
+	struct lil_value *cmd = alloc_value(NULL);
 	int save_eol = lil->ignoreeol;
 
 	lil->ignoreeol = 0;
@@ -862,7 +865,10 @@ static struct lil_value *get_bracketpart(struct lil *lil)
 		}
 	}
 
-	val = lil_parse_value(lil, cmd, 0);
+	if (cnt)
+		lil_set_error_unbalanced(lil, ']');
+	else
+		val = lil_parse_value(lil, cmd, 0);
 	lil_free_value(cmd);
 	lil->ignoreeol = save_eol;
 	return val;
@@ -911,10 +917,17 @@ static struct lil_value *next_word(struct lil *lil)
 				lil_append_char(val, lil->code[lil->head++]);
 			}
 		}
+
+		if (cnt) {
+			lil_set_error_unbalanced(lil, '}');
+			lil_free_value(val);
+			val = NULL;
+		}
 	} else if (lil->code[lil->head] == '[') {
 		val = get_bracketpart(lil);
 	} else if (lil->code[lil->head] == '"' ||
 		   lil->code[lil->head] == '\'') {
+		bool matched = false;
 		char sc = lil->code[lil->head++];
 
 		val = alloc_value(NULL);
@@ -968,12 +981,19 @@ static struct lil_value *next_word(struct lil *lil)
 					break;
 				}
 			} else if (lil->code[lil->head] == sc) {
+				matched = true;
 				lil->head++;
 				break;
 			} else {
 				lil_append_char(val, lil->code[lil->head]);
 			}
 			lil->head++;
+		}
+
+		if (!matched) {
+			lil_set_error_unbalanced(lil, sc);
+			lil_free_value(val);
+			val = NULL;
 		}
 	} else {
 		start = lil->head;
@@ -1324,6 +1344,15 @@ static void lil_set_errorf_at(struct lil *lil, size_t pos, const char *fmt, ...)
 	va_end(args);
 
 	return lil_set_error_at(lil, pos, msg);
+}
+
+void lil_set_error_unbalanced(struct lil *lil, char expected)
+{
+	if (lil->error)
+		return;
+
+	lil_set_errorf_at(lil, lil->head, "expected %c", expected);
+	lil->error = ERROR_UNBALANCED;
 }
 
 int lil_error(struct lil *lil, const char **msg, size_t *pos)

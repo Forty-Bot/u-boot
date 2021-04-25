@@ -20,15 +20,6 @@ enum lil_setvar {
 	LIL_SETVAR_LOCAL_ONLY,
 };
 
-#define LIL_CALLBACK_EXIT 0
-#define LIL_CALLBACK_WRITE 1
-#define LIL_CALLBACK_READ 2
-#define LIL_CALLBACK_STORE 3
-#define LIL_CALLBACK_SOURCE 4
-#define LIL_CALLBACK_ERROR 5
-#define LIL_CALLBACK_SETVAR 6
-#define LIL_CALLBACK_GETVAR 7
-
 #include <stdint.h>
 #include <inttypes.h>
 
@@ -40,20 +31,6 @@ struct lil_list;
 struct lil;
 typedef struct lil_value *(*lil_func_proc_t)(struct lil *lil, size_t argc,
 					     struct lil_value **argv);
-typedef void (*lil_exit_callback_proc_t)(struct lil *lil,
-					 struct lil_value *arg);
-typedef void (*lil_write_callback_proc_t)(struct lil *lil, const char *msg);
-typedef char *(*lil_read_callback_proc_t)(struct lil *lil, const char *name);
-typedef char *(*lil_source_callback_proc_t)(struct lil *lil, const char *name);
-typedef void (*lil_store_callback_proc_t)(struct lil *lil, const char *name,
-					  const char *data);
-typedef void (*lil_error_callback_proc_t)(struct lil *lil, size_t pos,
-					  const char *msg);
-typedef int (*lil_setvar_callback_proc_t)(struct lil *lil, const char *name,
-					  struct lil_value **value);
-typedef int (*lil_getvar_callback_proc_t)(struct lil *lil, const char *name,
-					  struct lil_value **value);
-typedef void (*lil_callback_proc_t)(void);
 
 struct lil *lil_new(void);
 void lil_free(struct lil *lil);
@@ -66,8 +43,6 @@ struct lil_value *lil_parse_value(struct lil *lil, struct lil_value *val,
 				  int funclevel);
 struct lil_value *lil_call(struct lil *lil, const char *funcname, size_t argc,
 			   struct lil_value **argv);
-
-void lil_callback(struct lil *lil, int cb, lil_callback_proc_t proc);
 
 void lil_set_error(struct lil *lil, const char *msg);
 void lil_set_error_at(struct lil *lil, size_t pos, const char *msg);

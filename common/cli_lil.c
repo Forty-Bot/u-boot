@@ -24,7 +24,6 @@
  * overflows and is also useful when running through an automated fuzzer like AFL */
 /*#define LIL_ENABLE_RECLIMIT 10000*/
 
-#define CALLBACKS 8
 #define MAX_CATCHER_DEPTH 16384
 #define HASHMAP_CELLS 256
 #define HASHMAP_CELLMASK 0xFF
@@ -107,7 +106,6 @@ struct lil {
 	} error;
 	size_t err_head;
 	char *err_msg;
-	lil_callback_proc_t callback[CALLBACKS];
 	size_t parse_depth;
 };
 
@@ -672,21 +670,10 @@ struct lil_var *lil_set_var(struct lil *lil, const char *name,
 		    var->env == lil->rootenv && var->env != env)
 			var = NULL;
 
-		if (((!var && env == lil->rootenv) ||
-		     (var && var->env == lil->rootenv)) &&
-		    lil->callback[LIL_CALLBACK_SETVAR]) {
-			lil_setvar_callback_proc_t proc =
-				(lil_setvar_callback_proc_t)
-					lil->callback[LIL_CALLBACK_SETVAR];
-			struct lil_value *newval = val;
-			int r = proc(lil, name, &newval);
-
-			if (r < 0) {
+		if ((!var && env == lil->rootenv) ||
+		     (var && var->env == lil->rootenv)) {
+			if (env_set(name, val->d))
 				return NULL;
-			} else if (r > 0) {
-				val = newval;
-				freeval = 1;
-			}
 		}
 
 		if (var) {
@@ -731,14 +718,10 @@ struct lil_value *lil_get_var_or(struct lil *lil, const char *name,
 	struct lil_var *var = lil_find_var(lil, lil->env, name);
 	struct lil_value *retval = var ? var->v : defvalue;
 
-	if (lil->callback[LIL_CALLBACK_GETVAR] &&
-	    (!var || var->env == lil->rootenv)) {
-		lil_getvar_callback_proc_t proc =
-			(lil_getvar_callback_proc_t)
-				lil->callback[LIL_CALLBACK_GETVAR];
-		struct lil_value *newretval = retval;
+	if (!var || var->env == lil->rootenv) {
+		struct lil_value *newretval = lil_alloc_string(env_get(name));
 
-		if (proc(lil, name, &newretval))
+		if (newretval)
 			retval = newretval;
 	}
 	return retval;
@@ -1197,15 +1180,6 @@ struct lil_value *lil_parse(struct lil *lil, const char *code, size_t codelen,
 	}
 
 cleanup:
-	if (lil->error && lil->callback[LIL_CALLBACK_ERROR] &&
-	    lil->parse_depth == 1) {
-		lil_error_callback_proc_t proc =
-			(lil_error_callback_proc_t)
-				lil->callback[LIL_CALLBACK_ERROR];
-
-		proc(lil, lil->err_head, lil->err_msg);
-	}
-
 	if (words)
 		lil_free_list(words);
 	lil->code = save_code;
@@ -1285,14 +1259,6 @@ struct lil_value *lil_call(struct lil *lil, const char *funcname, size_t argc,
 	}
 
 	return r;
-}
-
-void lil_callback(struct lil *lil, int cb, lil_callback_proc_t proc)
-{
-	if (cb < 0 || cb > CALLBACKS)
-		return;
-
-	lil->callback[cb] = proc;
 }
 
 void lil_set_error(struct lil *lil, const char *msg)

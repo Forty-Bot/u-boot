@@ -592,7 +592,17 @@ static struct lil_var *lil_find_var(struct lil *lil, struct lil_env *env,
 
 static struct lil_func *lil_find_cmd(struct lil *lil, const char *name)
 {
-	return hm_get(&lil->cmdmap, name);
+	struct lil_func *r;
+	char *dot = strchr(name, '.');
+
+	/* Some U-Boot commands have dots in their names */
+	if (dot)
+		*dot = '\0';
+	r = hm_get(&lil->cmdmap, name);
+
+	if (dot)
+		*dot = '.';
+	return r;
 }
 
 static struct lil_func *add_func(struct lil *lil, const char *name)

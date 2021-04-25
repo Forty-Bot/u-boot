@@ -11,9 +11,14 @@ config CMDLINE
 	  Depending on the number of commands enabled, this can add
 	  substantially to the size of U-Boot.
 
+if CMDLINE
+
+choice
+	prompt "Shell"
+	default HUSH_PARSER
+
 config HUSH_PARSER
 	bool "Use hush shell"
-	depends on CMDLINE
 	help
 	  This option enables the "hush" shell (from Busybox) as command line
 	  interpreter, thus enabling powerful command line syntax like
@@ -25,9 +30,10 @@ config HUSH_PARSER
 
 config LIL
 	bool "Use LIL shell"
-	depends on CMDLINE
 	help
 	  TODO
+
+endchoice
 
 if LIL
 
@@ -36,6 +42,8 @@ config LIL_FULL
 	help
 	  This enables all LIL builtin functions, as well as expression support
 	  for arithmetic and bitwise operations.
+
+endif
 
 endif
 

@@ -124,6 +124,13 @@ struct expreval {
 
 static struct lil_value *next_word(struct lil *lil);
 static void register_stdcmds(struct lil *lil);
+static void lil_set_error(struct lil *lil, const char *msg);
+static void lil_set_errorf(struct lil *lil, const char *fmt, ...)
+	__attribute((format(__printf__, 2, 3)));
+static void lil_set_error_at(struct lil *lil, size_t pos, const char *msg);
+static void
+lil_set_errorf_at(struct lil *lil, size_t pos, const char *fmt, ...)
+	__attribute((format(__printf__, 3, 4)));
 
 #ifdef LIL_ENABLE_POOLS
 static struct lil_value **pool;
@@ -1066,20 +1073,13 @@ static struct lil_value *unknown_cmd(struct lil *lil, struct lil_list *words)
 			lil_pop_env(lil);
 			lil->in_catcher--;
 		} else {
-			char *msg = malloc(words->v[0]->l + 64);
-
-			sprintf(msg,
-				"catcher limit reached while trying to call unknown function %s",
-				words->v[0]->d);
-			lil_set_error_at(lil, lil->head, msg);
-			free(msg);
+			lil_set_errorf_at(lil, lil->head,
+					  "catcher limit reached while trying to call unknown function %s",
+					  words->v[0]->d);
 		}
 	} else {
-		char *msg = malloc(words->v[0]->l + 32);
-
-		sprintf(msg, "unknown function %s", words->v[0]->d);
-		lil_set_error_at(lil, lil->head, msg);
-		free(msg);
+		lil_set_errorf_at(lil, lil->head, "unknown function %s",
+				  words->v[0]->d);
 	}
 
 	return r;
@@ -1280,7 +1280,7 @@ struct lil_value *lil_call(struct lil *lil, const char *funcname, size_t argc,
 	return r;
 }
 
-void lil_set_error(struct lil *lil, const char *msg)
+static void lil_set_error(struct lil *lil, const char *msg)
 {
 	if (lil->error)
 		return;
@@ -1291,7 +1291,19 @@ void lil_set_error(struct lil *lil, const char *msg)
 	lil->err_msg = strdup(msg ? msg : "");
 }
 
-void lil_set_error_at(struct lil *lil, size_t pos, const char *msg)
+static void lil_set_errorf(struct lil *lil, const char *fmt, ...)
+{
+	va_list args;
+	char msg[CONFIG_SYS_PBSIZE];
+
+	va_start(args, fmt);
+	vsnprintf(msg, sizeof(msg), fmt, args);
+	va_end(args);
+
+	return lil_set_error(lil, msg);
+}
+
+static void lil_set_error_at(struct lil *lil, size_t pos, const char *msg)
 {
 	if (lil->error)
 		return;
@@ -1300,6 +1312,18 @@ void lil_set_error_at(struct lil *lil, size_t pos, const char *msg)
 	lil->error = ERROR_DEFAULT;
 	lil->err_head = pos;
 	lil->err_msg = strdup(msg ? msg : "");
+}
+
+static void lil_set_errorf_at(struct lil *lil, size_t pos, const char *fmt, ...)
+{
+	va_list args;
+	char msg[CONFIG_SYS_PBSIZE];
+
+	va_start(args, fmt);
+	vsnprintf(msg, sizeof(msg), fmt, args);
+	va_end(args);
+
+	return lil_set_error_at(lil, pos, msg);
 }
 
 int lil_error(struct lil *lil, const char **msg, size_t *pos)
@@ -2106,10 +2130,8 @@ static struct lil_value *fnc_rename(struct lil *lil, size_t argc,
 	newname = lil_to_string(argv[1]);
 	func = lil_find_cmd(lil, oldname);
 	if (!func) {
-		char *msg = malloc(24 + strlen(oldname));
-		sprintf(msg, "unknown function '%s'", oldname);
-		lil_set_error_at(lil, lil->head, msg);
-		free(msg);
+		lil_set_errorf_at(lil, lil->head, "unknown function '%s'",
+				  oldname);
 		return NULL;
 	}
 

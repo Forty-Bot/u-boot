@@ -51,8 +51,6 @@ struct lil_value *lil_parse_value(struct lil *lil, struct lil_value *val,
 struct lil_value *lil_call(struct lil *lil, const char *funcname, size_t argc,
 			   struct lil_value **argv);
 
-void lil_set_error(struct lil *lil, const char *msg);
-void lil_set_error_at(struct lil *lil, size_t pos, const char *msg);
 int lil_error(struct lil *lil, const char **msg, size_t *pos);
 
 const char *lil_to_string(struct lil_value *val);

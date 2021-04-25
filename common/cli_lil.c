@@ -17,11 +17,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Enable pools for reusing values, lists and environments. This will use more memory and
- * will rely on the runtime/OS to free the pools once the program ends, but will cause
- * considerably less memory fragmentation and improve the script execution performance. */
-/*#define LIL_ENABLE_POOLS*/
-
 /* Enable limiting recursive calls to lil_parse - this can be used to avoid call stack
  * overflows and is also useful when running through an automated fuzzer like AFL */
 /*#define LIL_ENABLE_RECLIMIT 10000*/
@@ -70,7 +65,7 @@ struct hashmap {
  */
 struct lil_value {
 	size_t l;
-#ifdef LIL_ENABLE_POOLS
+#ifdef CONFIG_LIL_POOLS
 	size_t c;
 #endif
 	char *d;
@@ -244,14 +239,12 @@ lil_set_errorf_at(struct lil *lil, size_t pos, const char *fmt, ...)
 	__attribute((format(__printf__, 3, 4)));
 static void lil_set_error_unbalanced(struct lil *lil, char expected);
 
-#ifdef LIL_ENABLE_POOLS
-static struct lil_value **pool;
-static int poolsize, poolcap;
-static struct lil_list **listpool;
-static size_t listpoolsize, listpoolcap;
-static struct lil_env **envpool;
-static size_t envpoolsize, envpoolcap;
-#endif
+static __maybe_unused struct lil_value **pool;
+static __maybe_unused int poolsize, poolcap;
+static __maybe_unused struct lil_list **listpool;
+static __maybe_unused size_t listpoolsize, listpoolcap;
+static __maybe_unused struct lil_env **envpool;
+static __maybe_unused size_t envpoolsize, envpoolcap;
 
 static unsigned long hm_hash(const char *key)
 {
@@ -319,7 +312,7 @@ static int hm_has(struct hashmap *hm, const char *key)
 	return 0;
 }
 
-#ifdef LIL_ENABLE_POOLS
+#ifdef CONFIG_LIL_POOLS
 static struct lil_value *alloc_from_pool(void)
 {
 	if (poolsize > 0) {
@@ -348,39 +341,48 @@ static void ensure_capacity(struct lil_value *val, size_t cap)
 		val->d = realloc(val->d, val->c);
 	}
 }
+#else
+static struct lil_value *alloc_from_pool(void)
+{
+	return NULL;
+}
+
+static void release_to_pool(struct lil_value *val) { }
+static void ensure_capacity(struct lil_value *val, size_t cap) { }
 #endif
 
 static struct lil_value *alloc_value_len(const char *str, size_t len)
 {
-#ifdef LIL_ENABLE_POOLS
-	struct lil_value *val = alloc_from_pool();
-#else
-	struct lil_value *val = calloc(1, sizeof(struct lil_value));
-#endif
+	struct lil_value *val;
 
+	if (IS_ENABLED(CONFIG_LIL_POOLS))
+		val = alloc_from_pool();
+	else
+		val = calloc(1, sizeof(struct lil_value));
 	if (!val)
 		return NULL;
+
 	if (str) {
 		val->l = len;
-#ifdef LIL_ENABLE_POOLS
-		ensure_capacity(val, len + 1);
-#else
-		val->d = malloc(len + 1);
-		if (!val->d) {
-			free(val);
-			return NULL;
+		if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+			ensure_capacity(val, len + 1);
+		} else {
+			val->d = malloc(len + 1);
+			if (!val->d) {
+				free(val);
+				return NULL;
+			}
 		}
-#endif
 		memcpy(val->d, str, len);
 		val->d[len] = 0;
 	} else {
 		val->l = 0;
-#ifdef LIL_ENABLE_POOLS
-		ensure_capacity(val, 1);
-		val->d[0] = '\0';
-#else
-		val->d = NULL;
-#endif
+		if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+			ensure_capacity(val, 1);
+			val->d[0] = '\0';
+		} else {
+			val->d = NULL;
+		}
 	}
 	return val;
 }
@@ -396,76 +398,72 @@ struct lil_value *lil_clone_value(struct lil_value *src)
 
 	if (!src)
 		return NULL;
-#ifdef LIL_ENABLE_POOLS
-	val = alloc_from_pool();
-#else
-	val = calloc(1, sizeof(struct lil_value));
-#endif
+
+	if (IS_ENABLED(CONFIG_LIL_POOLS))
+		val = alloc_from_pool();
+	else
+		val = calloc(1, sizeof(struct lil_value));
 	if (!val)
 		return NULL;
 
 	val->l = src->l;
 	if (src->l) {
-#ifdef LIL_ENABLE_POOLS
-		ensure_capacity(val, val->l + 1);
-#else
-		val->d = malloc(val->l + 1);
-		if (!val->d) {
-			free(val);
-			return NULL;
+		if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+			ensure_capacity(val, val->l + 1);
+		} else {
+			val->d = malloc(val->l + 1);
+			if (!val->d) {
+				free(val);
+				return NULL;
+			}
 		}
-#endif
 		memcpy(val->d, src->d, val->l + 1);
 	} else {
-#ifdef LIL_ENABLE_POOLS
-		ensure_capacity(val, 1);
-		val->d[0] = '\0';
-#else
-		val->d = NULL;
-#endif
+		if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+			ensure_capacity(val, 1);
+			val->d[0] = '\0';
+		} else {
+			val->d = NULL;
+		}
 	}
 	return val;
 }
 
 int lil_append_char(struct lil_value *val, char ch)
 {
-#ifdef LIL_ENABLE_POOLS
-	ensure_capacity(val, val->l + 2);
-	val->d[val->l++] = ch;
-	val->d[val->l] = '\0';
-#else
-	char *new = realloc(val->d, val->l + 2);
+	if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+		ensure_capacity(val, val->l + 2);
+		val->d[val->l++] = ch;
+		val->d[val->l] = '\0';
+	} else {
+		char *new = realloc(val->d, val->l + 2);
 
-	if (!new)
-		return 0;
+		if (!new)
+			return 0;
 
-	new[val->l++] = ch;
-	new[val->l] = 0;
-	val->d = new;
-#endif
+		new[val->l++] = ch;
+		new[val->l] = 0;
+		val->d = new;
+	}
 	return 1;
 }
 
 int lil_append_string_len(struct lil_value *val, const char *s, size_t len)
 {
-#ifndef LIL_ENABLE_POOLS
-	char *new;
-#endif
-
 	if (!s || !s[0])
 		return 1;
 
-#ifdef LIL_ENABLE_POOLS
-	ensure_capacity(val, val->l + len + 1);
-	memcpy(val->d + val->l, s, len + 1);
-#else
-	new = realloc(val->d, val->l + len + 1);
-	if (!new)
-		return 0;
+	if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+		ensure_capacity(val, val->l + len + 1);
+		memcpy(val->d + val->l, s, len + 1);
+	} else {
+		char *new = realloc(val->d, val->l + len + 1);
 
-	memcpy(new + val->l, s, len + 1);
-	val->d = new;
-#endif
+		if (!new)
+			return 0;
+		memcpy(new + val->l, s, len + 1);
+		val->d = new;
+	}
 	val->l += len;
 	return 1;
 }
@@ -477,24 +475,20 @@ int lil_append_string(struct lil_value *val, const char *s)
 
 int lil_append_val(struct lil_value *val, struct lil_value *v)
 {
-#ifndef LIL_ENABLE_POOLS
-	char *new;
-#endif
-
 	if (!v || v->d || !v->l)
 		return 1;
 
-#ifdef LIL_ENABLE_POOLS
-	ensure_capacity(val, val->l + v->l + 1);
-	memcpy(val->d + val->l, v->d, v->l + 1);
-#else
-	new = realloc(val->d, val->l + v->l + 1);
-	if (!new)
-		return 0;
+	if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+		ensure_capacity(val, val->l + v->l + 1);
+		memcpy(val->d + val->l, v->d, v->l + 1);
+	} else {
+		char *new = realloc(val->d, val->l + v->l + 1);
 
-	memcpy(new + val->l, v->d, v->l + 1);
-	val->d = new;
-#endif
+		if (!new)
+			return 0;
+		memcpy(new + val->l, v->d, v->l + 1);
+		val->d = new;
+	}
 	val->l += v->l;
 	return 1;
 }
@@ -504,22 +498,21 @@ void lil_free_value(struct lil_value *val)
 	if (!val)
 		return;
 
-#ifdef LIL_ENABLE_POOLS
-	release_to_pool(val);
-#else
-	free(val->d);
-	free(val);
-#endif
+	if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+		release_to_pool(val);
+	} else {
+		free(val->d);
+		free(val);
+	}
 }
 
 struct lil_list *lil_alloc_list(void)
 {
 	struct lil_list *list;
 
-#ifdef LIL_ENABLE_POOLS
-	if (listpoolsize > 0)
+	if (IS_ENABLED(CONFIG_LIL_POOLS) && listpoolsize > 0)
 		return listpool[--listpoolsize];
-#endif
+
 	list = calloc(1, sizeof(struct lil_list));
 	list->v = NULL;
 	return list;
@@ -535,19 +528,21 @@ void lil_free_list(struct lil_list *list)
 	for (i = 0; i < list->c; i++)
 		lil_free_value(list->v[i]);
 
-#ifdef LIL_ENABLE_POOLS
-	list->c = 0;
-	if (listpoolsize == listpoolcap) {
-		listpoolcap =
-			listpoolcap ? (listpoolcap + listpoolcap / 2) : 32;
-		listpool = realloc(listpool,
-				   sizeof(struct lil_list *) * listpoolcap);
+	if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+		list->c = 0;
+		if (listpoolsize == listpoolcap) {
+			if (listpoolcap)
+				listpoolcap += listpoolcap / 2;
+			else
+				listpoolcap = 32;
+			listpool = realloc(listpool,
+					   sizeof(*listpool) * listpoolcap);
+		}
+		listpool[listpoolsize++] = list;
+	} else {
+		free(list->v);
+		free(list);
 	}
-	listpool[listpoolsize++] = list;
-#else
-	free(list->v);
-	free(list);
-#endif
 }
 
 void lil_list_append(struct lil_list *list, struct lil_value *val)
@@ -624,8 +619,7 @@ struct lil_env *lil_alloc_env(struct lil_env *parent)
 {
 	struct lil_env *env;
 
-#ifdef LIL_ENABLE_POOLS
-	if (envpoolsize > 0) {
+	if (IS_ENABLED(CONFIG_LIL_POOLS) && envpoolsize > 0) {
 		size_t i, j;
 
 		env = envpool[--envpoolsize];
@@ -644,7 +638,7 @@ struct lil_env *lil_alloc_env(struct lil_env *parent)
 		}
 		return env;
 	}
-#endif
+
 	env = calloc(1, sizeof(struct lil_env));
 	env->parent = parent;
 	return env;
@@ -658,32 +652,35 @@ void lil_free_env(struct lil_env *env)
 		return;
 
 	lil_free_value(env->retval);
-#ifdef LIL_ENABLE_POOLS
-	for (i = 0; i < env->vars; i++) {
-		free(env->var[i]->n);
-		lil_free_value(env->var[i]->v);
-		free(env->var[i]->w);
-		free(env->var[i]);
-	}
-	free(env->var);
+	if (IS_ENABLED(CONFIG_LIL_POOLS)) {
+		for (i = 0; i < env->vars; i++) {
+			free(env->var[i]->n);
+			lil_free_value(env->var[i]->v);
+			free(env->var[i]->w);
+			free(env->var[i]);
+		}
+		free(env->var);
 
-	if (envpoolsize == envpoolcap) {
-		envpoolcap = envpoolcap ? (envpoolcap + envpoolcap / 2) : 64;
-		envpool =
-			realloc(envpool, sizeof(struct lil_env *) * envpoolcap);
+		if (envpoolsize == envpoolcap) {
+			if (envpoolcap)
+				envpoolcap += envpoolcap / 2;
+			else
+				envpoolcap = 64;
+			envpool = realloc(envpool,
+					  sizeof(*envpool) * envpoolcap);
+		}
+		envpool[envpoolsize++] = env;
+	} else {
+		hm_destroy(&env->varmap);
+		for (i = 0; i < env->vars; i++) {
+			free(env->var[i]->n);
+			lil_free_value(env->var[i]->v);
+			free(env->var[i]->w);
+			free(env->var[i]);
+		}
+		free(env->var);
+		free(env);
 	}
-	envpool[envpoolsize++] = env;
-#else
-	hm_destroy(&env->varmap);
-	for (i = 0; i < env->vars; i++) {
-		free(env->var[i]->n);
-		lil_free_value(env->var[i]->v);
-		free(env->var[i]->w);
-		free(env->var[i]);
-	}
-	free(env->var);
-	free(env);
-#endif
 }
 
 static struct lil_var *lil_find_local_var(struct lil *lil, struct lil_env *env,

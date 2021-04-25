@@ -24,10 +24,6 @@
  * overflows and is also useful when running through an automated fuzzer like AFL */
 /*#define LIL_ENABLE_RECLIMIT 10000*/
 
-#define ERROR_NOERROR 0
-#define ERROR_DEFAULT 1
-#define ERROR_FIXHEAD 2
-
 #define CALLBACKS 8
 #define MAX_CATCHER_DEPTH 16384
 #define HASHMAP_CELLS 256
@@ -104,7 +100,11 @@ struct lil {
 	struct lil_env *rootenv;
 	struct lil_env *downenv;
 	struct lil_value *empty;
-	int error;
+	enum {
+		ERROR_NOERROR = 0,
+		ERROR_DEFAULT,
+		ERROR_FIXHEAD,
+	} error;
 	size_t err_head;
 	char *err_msg;
 	lil_callback_proc_t callback[CALLBACKS];
@@ -655,7 +655,7 @@ int lil_register(struct lil *lil, const char *name, lil_func_proc_t proc)
 }
 
 struct lil_var *lil_set_var(struct lil *lil, const char *name,
-			    struct lil_value *val, int local)
+			    struct lil_value *val, enum lil_setvar local)
 {
 	struct lil_var **nvar;
 	struct lil_env *env =

@@ -13,10 +13,12 @@
 
 #define LIL_VERSION_STRING "0.1"
 
-#define LIL_SETVAR_GLOBAL 0
-#define LIL_SETVAR_LOCAL 1
-#define LIL_SETVAR_LOCAL_NEW 2
-#define LIL_SETVAR_LOCAL_ONLY 3
+enum lil_setvar {
+	LIL_SETVAR_GLOBAL = 0,
+	LIL_SETVAR_LOCAL,
+	LIL_SETVAR_LOCAL_NEW,
+	LIL_SETVAR_LOCAL_ONLY,
+};
 
 #define LIL_CALLBACK_EXIT 0
 #define LIL_CALLBACK_WRITE 1
@@ -100,7 +102,7 @@ struct lil_env *lil_push_env(struct lil *lil);
 void lil_pop_env(struct lil *lil);
 
 struct lil_var *lil_set_var(struct lil *lil, const char *name,
-			    struct lil_value *val, int local);
+			    struct lil_value *val, enum lil_setvar local);
 struct lil_value *lil_get_var(struct lil *lil, const char *name);
 struct lil_value *lil_get_var_or(struct lil *lil, const char *name,
 				 struct lil_value *defvalue);

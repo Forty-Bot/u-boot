@@ -24,7 +24,6 @@
  * overflows and is also useful when running through an automated fuzzer like AFL */
 /*#define LIL_ENABLE_RECLIMIT 10000*/
 
-#define CALLBACKS 8
 #define MAX_CATCHER_DEPTH 16384
 #define HASHMAP_CELLS 256
 #define HASHMAP_CELLMASK 0xFF
@@ -107,7 +106,7 @@ struct lil {
 	} error;
 	size_t err_head;
 	char *err_msg;
-	lil_callback_proc_t callback[CALLBACKS];
+	struct lil_callbacks callbacks;
 	size_t parse_depth;
 };
 
@@ -677,14 +676,10 @@ struct lil_var *lil_set_var(struct lil *lil, const char *name,
 		    var->env == lil->rootenv && var->env != env)
 			var = NULL;
 
-		if (((!var && env == lil->rootenv) ||
-		     (var && var->env == lil->rootenv)) &&
-		    lil->callback[LIL_CALLBACK_SETVAR]) {
-			lil_setvar_callback_proc_t proc =
-				(lil_setvar_callback_proc_t)
-					lil->callback[LIL_CALLBACK_SETVAR];
+		if (lil->callbacks.setvar && ((!var && env == lil->rootenv) ||
+		     (var && var->env == lil->rootenv))) {
 			struct lil_value *newval = val;
-			int r = proc(lil, name, &newval);
+			int r = lil->callbacks.setvar(lil, name, &newval);
 
 			if (r < 0) {
 				return NULL;
@@ -736,14 +731,10 @@ struct lil_value *lil_get_var_or(struct lil *lil, const char *name,
 	struct lil_var *var = lil_find_var(lil, lil->env, name);
 	struct lil_value *retval = var ? var->v : defvalue;
 
-	if (lil->callback[LIL_CALLBACK_GETVAR] &&
-	    (!var || var->env == lil->rootenv)) {
-		lil_getvar_callback_proc_t proc =
-			(lil_getvar_callback_proc_t)
-				lil->callback[LIL_CALLBACK_GETVAR];
+	if (lil->callbacks.getvar && (!var || var->env == lil->rootenv)) {
 		struct lil_value *newretval = retval;
 
-		if (proc(lil, name, &newretval))
+		if (lil->callbacks.getvar(lil, name, &newretval))
 			retval = newretval;
 	}
 	return retval;
@@ -767,13 +758,19 @@ void lil_pop_env(struct lil *lil)
 	}
 }
 
-struct lil *lil_new(void)
+struct lil *lil_new(const struct lil_callbacks *callbacks)
 {
 	struct lil *lil = calloc(1, sizeof(struct lil));
+
+	if (!lil)
+		return NULL;
 
 	lil->rootenv = lil->env = lil_alloc_env(NULL);
 	lil->empty = alloc_value(NULL);
 	lil->dollarprefix = strdup("set ");
+	if (callbacks)
+		memcpy(&lil->callbacks, callbacks, sizeof(lil->callbacks));
+
 	hm_init(&lil->cmdmap);
 	register_stdcmds(lil);
 	return lil;
@@ -1202,15 +1199,6 @@ struct lil_value *lil_parse(struct lil *lil, const char *code, size_t codelen,
 	}
 
 cleanup:
-	if (lil->error && lil->callback[LIL_CALLBACK_ERROR] &&
-	    lil->parse_depth == 1) {
-		lil_error_callback_proc_t proc =
-			(lil_error_callback_proc_t)
-				lil->callback[LIL_CALLBACK_ERROR];
-
-		proc(lil, lil->err_head, lil->err_msg);
-	}
-
 	if (words)
 		lil_free_list(words);
 	lil->code = save_code;
@@ -1290,14 +1278,6 @@ struct lil_value *lil_call(struct lil *lil, const char *funcname, size_t argc,
 	}
 
 	return r;
-}
-
-void lil_callback(struct lil *lil, int cb, lil_callback_proc_t proc)
-{
-	if (cb < 0 || cb > CALLBACKS)
-		return;
-
-	lil->callback[cb] = proc;
 }
 
 void lil_set_error(struct lil *lil, const char *msg)
@@ -2396,7 +2376,7 @@ static struct lil_value *fnc_jaileval(struct lil *lil, size_t argc,
 			return NULL;
 	}
 
-	sublil = lil_new();
+	sublil = lil_new(NULL);
 	if (base != 1) {
 		for (i = lil->syscmds; i < lil->cmds; i++) {
 			struct lil_func *fnc = lil->cmd[i];

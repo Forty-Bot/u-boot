@@ -12,6 +12,7 @@
 #include <bootstage.h>
 #include <cli.h>
 #include <cli_hush.h>
+#include <cli_lil.h>
 #include <command.h>
 #include <console.h>
 #include <env.h>
@@ -21,6 +22,50 @@
 #include <asm/global_data.h>
 
 DECLARE_GLOBAL_DATA_PTR;
+
+#ifdef CONFIG_LIL
+struct lil *lil;
+
+static int env_setvar(struct lil *lil, const char *name,
+		      struct lil_value **value)
+{
+	if (env_set(name, lil_to_string(*value)))
+		return -1;
+	return 0;
+}
+
+static int env_getvar(struct lil *lil, const char *name,
+		      struct lil_value **value)
+{
+	*value = lil_alloc_string(env_get(name));
+	return 1;
+}
+
+static const struct lil_callbacks env_callbacks = {
+	.setvar = env_setvar,
+	.getvar = env_getvar,
+};
+
+static int lil_run(const char *cmd)
+{
+	int ret;
+	size_t pos;
+	struct lil_value *result = lil_parse(lil, cmd, 0, 0);
+	const char *err_msg, *strres = lil_to_string(result);
+
+	/* The result may be very big, so use puts */
+	if (strres[0]) {
+		puts(strres);
+		putc('\n');
+	}
+	lil_free_value(result);
+
+	ret = lil_error(lil, &err_msg, &pos);
+	if (ret)
+		printf("error at %zu: %s\n", pos, err_msg);
+	return ret;
+}
+#endif
 
 #ifdef CONFIG_CMDLINE
 /*
@@ -32,7 +77,15 @@ DECLARE_GLOBAL_DATA_PTR;
  */
 int run_command(const char *cmd, int flag)
 {
-#if !CONFIG_IS_ENABLED(HUSH_PARSER)
+#ifdef CONFIG_HUSH_PARSER
+	int hush_flags = FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP;
+
+	if (flag & CMD_FLAG_ENV)
+		hush_flags |= FLAG_CONT_ON_NEWLINE;
+	return parse_string_outer(cmd, hush_flags);
+#elif defined(CONFIG_LIL)
+	return lil_run(cmd);
+#else
 	/*
 	 * cli_run_command can return 0 or 1 for success, so clean up
 	 * its result.
@@ -41,12 +94,6 @@ int run_command(const char *cmd, int flag)
 		return 1;
 
 	return 0;
-#else
-	int hush_flags = FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP;
-
-	if (flag & CMD_FLAG_ENV)
-		hush_flags |= FLAG_CONT_ON_NEWLINE;
-	return parse_string_outer(cmd, hush_flags);
 #endif
 }
 
@@ -59,9 +106,7 @@ int run_command(const char *cmd, int flag)
  */
 int run_command_repeatable(const char *cmd, int flag)
 {
-#ifndef CONFIG_HUSH_PARSER
-	return cli_simple_run_command(cmd, flag);
-#else
+#ifdef CONFIG_HUSH_PARSER
 	/*
 	 * parse_string_outer() returns 1 for failure, so clean up
 	 * its result.
@@ -71,6 +116,10 @@ int run_command_repeatable(const char *cmd, int flag)
 		return -1;
 
 	return 0;
+#elif defined(CONFIG_LIL)
+	return run_command(cmd, flag);
+#else
+	return cli_simple_run_command(cmd, flag);
 #endif
 }
 #else
@@ -90,7 +139,7 @@ int run_command_list(const char *cmd, int len, int flag)
 
 	if (len == -1) {
 		len = strlen(cmd);
-#ifdef CONFIG_HUSH_PARSER
+#if defined(CONFIG_HUSH_PARSER) || defined(CONFIG_LIL)
 		/* hush will never change our string */
 		need_buff = 0;
 #else
@@ -107,7 +156,9 @@ int run_command_list(const char *cmd, int len, int flag)
 	}
 #ifdef CONFIG_HUSH_PARSER
 	rcode = parse_string_outer(buff, FLAG_PARSE_SEMICOLON);
-#else
+#elif defined(CONFIG_LIL)
+	rcode = lil_run(buff);
+#elif defined(CONFIG_CMDLINE)
 	/*
 	 * This function will overwrite any \n it sees with a \0, which
 	 * is why it can't work with a const char *. Here we are making
@@ -115,11 +166,9 @@ int run_command_list(const char *cmd, int len, int flag)
 	 * doing a malloc() which is actually required only in a case that
 	 * is pretty rare.
 	 */
-#ifdef CONFIG_CMDLINE
 	rcode = cli_simple_run_command_list(buff, flag);
 #else
 	rcode = board_run_command(buff);
-#endif
 #endif
 	if (need_buff)
 		free(buff);
@@ -241,9 +290,11 @@ void cli_init(void)
 {
 #ifdef CONFIG_HUSH_PARSER
 	u_boot_hush_start();
+#elif defined(CONFIG_LIL)
+	lil = lil_new(&env_callbacks);
 #endif
 
-#if defined(CONFIG_HUSH_INIT_VAR)
+#ifdef CONFIG_HUSH_INIT_VAR
 	hush_init_var();
 #endif
 }

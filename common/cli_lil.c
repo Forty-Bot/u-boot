@@ -11,6 +11,7 @@
 #include <common.h>
 #include <cli_lil.h>
 #include <console.h>
+#include <command.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -61,6 +62,7 @@ struct lil_var {
 struct lil_env {
 	struct lil_env *parent;
 	struct lil_func *func;
+	const char *proc;
 	struct lil_value *catcher_for;
 	struct lil_var **var;
 	size_t vars;
@@ -1123,7 +1125,10 @@ static struct lil_value *run_cmd(struct lil *lil, struct lil_func *cmd,
 
 	if (cmd->proc) {
 		size_t shead = lil->head;
+
+		lil->env->proc = words->v[0]->d;
 		r = cmd->proc(lil, words->c - 1, words->v + 1);
+		lil->env->proc = NULL;
 
 		if (lil->error == ERROR_FIXHEAD) {
 			lil->error = ERROR_DEFAULT;
@@ -1271,7 +1276,9 @@ struct lil_value *lil_call(struct lil *lil, const char *funcname, size_t argc,
 
 	if (cmd) {
 		if (cmd->proc) {
+			lil->env->proc = funcname;
 			r = cmd->proc(lil, argc, argv);
+			lil->env->proc = NULL;
 		} else {
 			size_t i;
 
@@ -3268,8 +3275,32 @@ static struct lil_value *fnc_watch(struct lil *lil, size_t argc,
 	return NULL;
 }
 
+static struct lil_value *fnc_builtin(struct lil *lil, size_t argc,
+				     struct lil_value **lil_argv)
+{
+	int i, err, repeatable;
+	/*
+	 * We need space for the function name, and the last argv must be NULL
+	 */
+	char **argv = calloc(sizeof(char *), argc + 2);
+
+	argv[0] = (char *)lil->env->proc;
+	for (i = 0; i < argc; i++)
+		argv[i + 1] = (char *)lil_to_string(lil_argv[i]);
+
+	err = cmd_process(0, argc + 1, argv, &repeatable, NULL);
+	if (err)
+		lil_set_errorf(lil, "%s failed", argv[0]);
+	free(argv);
+
+	return 0;
+}
+
 static void register_stdcmds(struct lil *lil)
 {
+	struct cmd_tbl *cmdtp, *start = ll_entry_start(struct cmd_tbl, cmd);
+	const int len = ll_entry_count(struct cmd_tbl, cmd);
+
 	lil_register(lil, "dec", fnc_dec);
 	lil_register(lil, "eval", fnc_eval);
 	lil_register(lil, "expr", fnc_expr);
@@ -3284,6 +3315,9 @@ static void register_stdcmds(struct lil *lil)
 	lil_register(lil, "strcmp", fnc_strcmp);
 	lil_register(lil, "try", fnc_try);
 	lil_register(lil, "while", fnc_while);
+
+	for (cmdtp = start; cmdtp != start + len; cmdtp++)
+		lil_register(lil, cmdtp->name, fnc_builtin);
 
 	if (IS_ENABLED(CONFIG_LIL_FULL)) {
 		lil_register(lil, "append", fnc_append);

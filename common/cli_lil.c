@@ -17,11 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Enable limiting recursive calls to lil_parse - this can be used to avoid call stack
- * overflows and is also useful when running through an automated fuzzer like AFL */
-/*#define LIL_ENABLE_RECLIMIT 10000*/
-
-#define MAX_CATCHER_DEPTH 16384
+#define MAX_CATCHER_DEPTH (CONFIG_LIL_RECLIMIT ?: 256)
 #define HASHMAP_CELLS 256
 #define HASHMAP_CELLMASK 0xFF
 
@@ -1289,12 +1285,10 @@ struct lil_value *lil_parse(struct lil *lil, const char *code, size_t codelen,
 
 	lil_skip_spaces(lil);
 	lil->parse_depth++;
-#ifdef LIL_ENABLE_RECLIMIT
-	if (lil->parse_depth > LIL_ENABLE_RECLIMIT) {
-		lil_set_error(lil, "Too many recursive calls");
+	if (CONFIG_LIL_RECLIMIT && lil->parse_depth > CONFIG_LIL_RECLIMIT) {
+		lil_set_error(lil, "recursion limit reached");
 		goto cleanup;
 	}
-#endif
 
 	if (lil->parse_depth == 1)
 		lil->error = 0;

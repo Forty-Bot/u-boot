@@ -369,7 +369,7 @@ int lil_append_val(struct lil_value *val, struct lil_value *v)
 	char *new;
 #endif
 
-	if (!v || !v->l)
+	if (!v || v->d || !v->l)
 		return 1;
 
 #ifdef LIL_ENABLE_POOLS
